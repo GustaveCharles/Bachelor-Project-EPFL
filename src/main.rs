@@ -1,36 +1,11 @@
-// //extern crate wabt;
-// use std::fs::File;
-// use std::io::Read;
-// use wasmparser::{Parser, Chunk, Payload::*};
-
-
-// fn read_wasm_file(file_path: &str) -> Result<Vec<u8>, std::io::Error> {
-//     let mut file = File::open(file_path)?;
-//     let mut wasm_data = Vec::new();
-//     file.read_to_end(&mut wasm_data)?;
-//     Ok(wasm_data)
-// }
-
-// fn main() -> Result<(), Box<dyn std::error::Error>>{
-//     //let binary_bytes = include_bytes!("hello_cargo.wasm");
-    
-//     //let module = wabt::Module::read_binary(binary_bytes).expect("Failed to parse Wasm module");
-    
-//     // Access and work with the parsed Wasm module data here
-//     let wasm_file_path = "hello_cargo.wasm";
-//     let wasm_binary = read_wasm_file(wasm_file_path)?;
-//     //println!("File contents: {}", wasm_binary);
-
-//     let mut parser = Parser::new(wasm_binary);
-
-//     for payload in parser.parse_all()
-
-//     Ok(())
+// PARSED CODE
+// fn main() {
+//     println!("Hello, world!");
 // }
 
 use std::io::Read;
 use std::fs::File;
-use wasmparser::{Parser, Chunk, Payload::*, types};
+use wasmparser::{Parser,DataKind,Chunk, Payload::*, types};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let wasm_file_path = "src/hello_cargo.wasm";
@@ -49,28 +24,48 @@ fn parse(mut reader: impl Read) -> Result<(), Box<dyn std::error::Error>> {
     for payload in parser.parse_all(&buf) {
         match payload? {
             // Sections for WebAssembly modules
-            Version { .. } => { /* ... */ }
+            Version { .. } => { println!("====== Module");}
             TypeSection(types) => { }
-            ImportSection(imports) => { /* ... */ }
+            ImportSection(imports) => { for import in imports {
+                let import = import?;
+                println!("  Import {}::{}", import.module, import.name);
+            } }
             FunctionSection(types) => { /* ... */ }
             TableSection(tables) => { /* ... */ }
             MemorySection(memories) => { /* ... */ }
             TagSection(tags) => { /* ... */ }
             GlobalSection(globals) => { /* ... */ }
-            ExportSection(exports) => { /* ... */ }
+            ExportSection(exports) => { 
+                for export in exports {
+                let export = export?;
+                println!("  Export {} {:?}", export.name, export.kind);
+            } }
             StartSection { .. } => { /* ... */ }
             ElementSection(elements) => { /* ... */ }
             DataCountSection { .. } => { /* ... */ }
-            DataSection(data) => { /* ... */ }
+            DataSection(data) => { for item in data {
+                let item = item?;
+                if let DataKind::Active { offset_expr, .. } = item.kind {
+                    for op in offset_expr.get_operators_reader() {
+                        op?;
+                    }
+                }
+            } }
 
             // Here we know how many functions we'll be receiving as
             // `CodeSectionEntry`, so we can prepare for that, and
             // afterwards we can parse and handle each function
             // individually.
-            CodeSectionStart { .. } => { /* ... */ }
+            CodeSectionStart { count,range,size } => {
+                println!("{}", count);
+                println!("{}", size);
+
+                 }
             CodeSectionEntry(body) => {
-                // here we can iterate over `body` to parse the function
-                // and its locals
+                //println!("Code Section Entry:");
+                // You can access and print the function bodies here
+                //println!("  Operator: {:?}", body);
+            
             }
 
             // Sections for WebAssembly components
