@@ -8,7 +8,7 @@ use std::io::Read;
 use wasmparser::{types, Chunk, DataKind, Parser, Payload::*, VisitOperator};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let wasm_file_path = "src/hello_cargo.wasm";
+    let wasm_file_path = "src/lib/write_std_opti.wasm";
     let file = File::open(wasm_file_path)?;
     parse(file)?;
 
