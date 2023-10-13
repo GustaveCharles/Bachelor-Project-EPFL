@@ -1,0 +1,70 @@
+ext: Import wasi_snapshot_preview1::proc_exit
+ext: Import wasi_snapshot_preview1::fd_write
+ext: Export memory Memory
+ext: Export __indirect_function_table Table
+ext: Export _start Func
+ext: Export __errno_location Func
+ext: Export stackSave Func
+ext: Export stackRestore Func
+ext: Export stackAlloc Func
+Operator: Unreachable
+Operator: End
+Operator: Nop
+Operator: Block { blockty: Type(I32) }
+Operator: GlobalGet { global_index: 0 }
+Operator: I32Const { value: 16 }
+Operator: I32Sub
+Operator: LocalTee { local_index: 0 }
+Operator: GlobalSet { global_index: 0 }
+Operator: LocalGet { local_index: 0 }
+Operator: I32Const { value: 14 }
+Operator: I32Store { memarg: MemArg { align: 2, max_align: 2, offset: 12, memory: 0 } }
+Operator: LocalGet { local_index: 0 }
+Operator: I32Const { value: 1024 }
+Operator: I32Store { memarg: MemArg { align: 2, max_align: 2, offset: 8, memory: 0 } }
+Operator: I32Const { value: 1 }
+Operator: LocalGet { local_index: 0 }
+Operator: I32Const { value: 8 }
+Operator: I32Add
+Operator: I32Const { value: 1 }
+Operator: LocalGet { local_index: 0 }
+Operator: I32Const { value: 4 }
+Operator: I32Add
+Operator: Call { function_index: 1 }
+Operator: LocalTee { local_index: 1 }
+Operator: If { blockty: Empty }
+Operator: I32Const { value: 1040 }
+Operator: LocalGet { local_index: 1 }
+Operator: I32Store { memarg: MemArg { align: 2, max_align: 2, offset: 0, memory: 0 } }
+Operator: End
+Operator: LocalGet { local_index: 0 }
+Operator: I32Load { memarg: MemArg { align: 2, max_align: 2, offset: 4, memory: 0 } }
+Operator: Drop
+Operator: LocalGet { local_index: 0 }
+Operator: I32Const { value: 16 }
+Operator: I32Add
+Operator: GlobalSet { global_index: 0 }
+Operator: I32Const { value: 0 }
+Operator: Call { function_index: 0 }
+Operator: Unreachable
+Operator: End
+Operator: Unreachable
+Operator: I32Const { value: 1040 }
+Operator: End
+Operator: Unreachable
+Operator: GlobalGet { global_index: 0 }
+Operator: End
+Operator: Unreachable
+Operator: LocalGet { local_index: 0 }
+Operator: GlobalSet { global_index: 0 }
+Operator: End
+Operator: Unreachable
+Operator: GlobalGet { global_index: 0 }
+Operator: LocalGet { local_index: 0 }
+Operator: I32Sub
+Operator: I32Const { value: -16 }
+Operator: I32And
+Operator: LocalTee { local_index: 0 }
+Operator: GlobalSet { global_index: 0 }
+Operator: LocalGet { local_index: 0 }
+Operator: End

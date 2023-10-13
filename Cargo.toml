@@ -5,5 +5,32 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[[bin]]
+name = "main"
+path = "src/main.rs"
+
+[[bin]]
+name = "LlvmWrapper"
+path = "src/LlvmWrapper.rs"
+
+[[bin]]
+name = "hello_world_ink"
+path = "src/hello_world_ink.rs"
+
+
+[[bin]]
+name = "hello"
+path = "src/new_hello.rs"
+
+
+[[bin]]
+name = "multAdd"
+path = "src/multAdd_ink.rs"
+
+[[bin]]
+name = "translate"
+path = "src/wat_to_llvm_translate.rs"
+
 [dependencies]
+inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm15-0"] }
 wasmparser = "0.113.1"

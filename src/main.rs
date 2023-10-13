@@ -1,14 +1,9 @@
-// PARSED CODE
-// fn main() {
-//     println!("Hello, world!");
-// }
-
 use std::fs::File;
 use std::io::Read;
 use wasmparser::{types, Chunk, DataKind, Parser, Payload::*, VisitOperator};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let wasm_file_path = "src/lib/heapsort.wasm";
+    let wasm_file_path = "src/lib/write_std_opti.wasm";
     let file = File::open(wasm_file_path)?;
     parse(file)?;
 
@@ -21,6 +16,7 @@ fn parse(mut reader: impl Read) -> Result<(), Box<dyn std::error::Error>> {
     let parser = Parser::new(0);
 
     for payload in parser.parse_all(&buf) {
+        
         match payload? {
             // Sections for WebAssembly modules
             Version { .. } => {
@@ -77,7 +73,7 @@ fn parse(mut reader: impl Read) -> Result<(), Box<dyn std::error::Error>> {
                 // }
                 while !reader.eof() {
                     let op = reader.read_operator();
-                    println!("Operator: {:?}", op)
+                    println!("Operator: {:?}", op.unwrap())
                 }
                 // while !reader.eof() {
                 //     reader.visit_operator(&mut NopVisit)?;
