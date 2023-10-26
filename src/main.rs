@@ -2,6 +2,13 @@ use std::fs::File;
 use std::io::Read;
 use wasmparser::{types, Chunk, DataKind, Parser, Payload::*, VisitOperator};
 
+use inkwell::{
+    builder::Builder,
+    context::Context,
+    module::Module,
+};
+use wasmparser::OperatorsReader;
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let wasm_file_path = "src/lib/write_std_opti.wasm";
     let file = File::open(wasm_file_path)?;
@@ -16,7 +23,6 @@ fn parse(mut reader: impl Read) -> Result<(), Box<dyn std::error::Error>> {
     let parser = Parser::new(0);
 
     for payload in parser.parse_all(&buf) {
-        
         match payload? {
             // Sections for WebAssembly modules
             Version { .. } => {
@@ -29,11 +35,21 @@ fn parse(mut reader: impl Read) -> Result<(), Box<dyn std::error::Error>> {
                     println!("  Import {}::{}", import.module, import.name);
                 }
             }
-            FunctionSection(types) => { /* ... */ }
+            FunctionSection(types) => { 
+                for type_fun in types{
+                    println!("Type fun {:?}", type_fun?)
+                }
+        /* ... */ }
             TableSection(tables) => { /* ... */ }
             MemorySection(memories) => { /* ... */ }
             TagSection(tags) => { /* ... */ }
-            GlobalSection(globals) => { /* ... */ }
+            GlobalSection(globals) => { 
+                for global in globals {
+                    let global = global?;
+                    println!("  Global {:?}", global);
+                    println!("  Global type{:?}", global.ty);
+                }
+                /* ... */ }
             ExportSection(exports) => {
                 for export in exports {
                     let export = export?;
@@ -139,3 +155,9 @@ fn parse(mut reader: impl Read) -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+// fn translate_func(reader: OperatorsReader, &mut context: Context,&mut module: Module,) -> Result<(), Box<dyn std::error::Error>> {
+
+
+//     Ok(())
+// }

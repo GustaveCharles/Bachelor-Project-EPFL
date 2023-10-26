@@ -10,10 +10,6 @@ name = "main"
 path = "src/main.rs"
 
 [[bin]]
-name = "LlvmWrapper"
-path = "src/LlvmWrapper.rs"
-
-[[bin]]
 name = "hello_world_ink"
 path = "src/hello_world_ink.rs"
 
@@ -27,9 +23,10 @@ path = "src/new_hello.rs"
 name = "multAdd"
 path = "src/multAdd_ink.rs"
 
+
 [[bin]]
 name = "translate"
-path = "src/wat_to_llvm_translate.rs"
+path = "src/translator.rs"
 
 [dependencies]
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm15-0"] }
