@@ -28,89 +28,6 @@ enum Value<'a> {
     Basic(BasicValueEnum<'a>),
     I32Const(i32),
 }
-// struct Register {
-//     value: Value<'static>,
-// }
-
-// impl Register {
-//     fn new() -> Register {
-//         Register { value: Value::I32Const(0) }
-//     }
-
-//     fn read(&self) -> Value<'_> {
-//         self.value
-//     }
-
-//     fn write(&mut self, data: Value<'_>) {
-//         self.value = data;
-//     }
-// }
-
-
-// struct RegisterBank {
-//     registers: Vec<RefCell<Register>>, // Use RefCell for interior mutability
-// }
-
-// impl RegisterBank {
-//     fn new(num_registers: usize) -> RegisterBank {
-//         let mut registers = Vec::with_capacity(num_registers);
-//         for _ in 0..num_registers {
-//             registers.push(RefCell::new(Register::new()));
-//         }
-//         RegisterBank { registers }
-//     }
-
-//     fn read_register(&self, index: usize) -> Value<'_> {
-//         self.registers[index].borrow().read()
-//     }
-
-//     fn write_register(&mut self, index: usize, data: Value<'_>) {
-//         self.registers[index].borrow_mut().write(data);
-//     }
-// }
-
-
-struct Register {
-    value: Value<'static>, // Assuming 'static lifetime here, adjust as needed
-}
-
-impl Register {
-    fn new() -> Register {
-        Register {
-            value: Value::I32Const(0), // Initialize with a default value if necessary
-        }
-    }
-
-    fn read(&self) -> &Value {
-        &self.value
-    }
-
-    fn write(&mut self, data: Value<'static>) {
-        self.value = data;
-    }
-}
-
-struct RegisterBank {
-    registers: Vec<RefCell<Register>>,
-}
-
-impl RegisterBank {
-    fn new(num_registers: usize) -> RegisterBank {
-        let mut registers = Vec::with_capacity(num_registers);
-        for _ in 0..num_registers {
-            registers.push(RefCell::new(Register::new()));
-        }
-        RegisterBank { registers }
-    }
-
-    fn read_register(&self, index: usize) -> Ref<'_, Value<'static>>  {
-        Ref::map(self.registers[index].borrow(), |r| r.read())
-    }
-
-    fn write_register(&self, index: usize, data: Value<'static>) {
-        self.registers[index].borrow_mut().write(data);
-    }
-}
 
 
 struct CustomStruct<'a> {
@@ -118,6 +35,59 @@ struct CustomStruct<'a> {
     basic_block: BasicBlock<'a>,
     int_type: i32,
     fn_value: FunctionValue<'a>,
+}
+
+struct Constructors<'a>{
+    builer: Builder<'a>,
+    context: Context,
+    module: Module<'a>,
+}
+
+struct Register<'a> {
+    value: Value<'a>,
+}
+
+impl<'a> Register<'a> {
+    fn new(value: Value<'a>) -> Register<'a> {
+        Register { value }
+    }
+
+    fn get_value(&self) -> &Value<'a> {
+        &self.value
+    }
+}
+
+// Define the RegisterBank struct
+struct RegisterBank<'a> {
+    registers: HashMap<String, Register<'a>>,
+}
+
+impl<'a> RegisterBank<'a> {
+    fn new() -> RegisterBank<'a> {
+        RegisterBank {
+            registers: HashMap::new(),
+        }
+    }
+
+    fn create_register(&mut self, name: &str, value: Value<'a>) {
+        // Create a new register with the provided value and insert it into the HashMap
+        self.registers.insert(name.to_string(), Register::new(value));
+    }
+
+    fn read_register(&self, name: &str) -> Option<&Value<'a>> {
+        // Read the value of a register by name
+        self.registers.get(name).map(|reg| reg.get_value())
+    }
+
+    fn write_register(&mut self, name: &str, value: Value<'a>) -> bool {
+        // Write a value to a register by name
+        if let Some(register) = self.registers.get_mut(name) {
+            register.value = value;
+            true
+        } else {
+            false
+        }
+    }
 }
 
 // ************************ MAIN ************************
@@ -345,9 +315,7 @@ fn process_function_body_helper(
     let mut stack: Vec<Value> = Vec::new();
     let mut next = 0;
 
-    let num_registers = 10;
-    let register_bank = Rc::new(RefCell::new(RegisterBank::new(num_registers))); // Use Rc<RefCell<RegisterBank>>
-
+    let mut register_bank = RegisterBank::new();
     //let fn_value = module.add_function(...);
 
     while !code.eof() {
@@ -448,9 +416,20 @@ fn process_function_body_helper(
                 next += 1;
                 println!("i32.mul")
             }
+            Operator::GlobalSet { global_index } => {
+                let name = format!("%G{}", global_index);
+                let num3 = context.i32_type().const_int(2, false);
+                // let value = module.add_global(
+                //     num3.get_type(),
+                //     Some(inkwell::AddressSpace::from(0)),
+                //     name.as_str(),
+                // );
+                
+            }
             Operator::GlobalGet { global_index } => {
                 //builder.build_load(context.i32_type(), ptr, "%G1");
-                let _global: inkwell::values::GlobalValue<'_> = module.get_global("%G0").unwrap();
+                let name = format!("%G{}", global_index);
+                let _global: inkwell::values::GlobalValue<'_> = module.get_global(&name).unwrap();
                 let ptr = _global.as_pointer_value();
                 builder.position_at_end(entry_bb);
                 let value = builder.build_load(context.i32_type(), ptr, "%G0");
@@ -468,10 +447,11 @@ fn process_function_body_helper(
                 //%0          = 23    ; (i32.const 23)  / local_versions = [nil,nil]
                 //%local.0.v0 = %0    ; (local.set 0)   / local_versions = [  0,nil]
                 //%1 = %local.0.v0    ; (local.get 0)   / local_versions = [  0,nil]
-                let register_val = register_bank.borrow().read_register(local_index as usize);
+                let name = format!("%R{}", local_index);
+                let register_val = register_bank.read_register(&name);
                 let register_val_cloned = register_val.clone();
 
-                stack.push(register_val_cloned);
+                stack.push(*register_val_cloned.unwrap());
 
                 println!("local.get {}", local_index);
             }
@@ -482,19 +462,9 @@ fn process_function_body_helper(
                 let local_var = stack.pop().unwrap();
                 let value_to_store = local_var.clone();
                 stack.push(value_to_store);
+                let name = format!("%R{}", local_index);
+                register_bank.write_register(&name, local_var);       
 
-                register_bank.borrow().write_register(local_index as usize, local_var);       
-
-                // Set the local variable to a value (e.g., 42)
-                //let value_to_store = context.i32_type().const_int(42, false);
-                //builder.build_store(local_var, value_to_store);
-
-                // Use local.tee-like operation to both set the local variable and return its value
-                //let loaded_value = builder
-                //   .build_load(context.i32_type(),local_var, "loaded_value");
-
-                // Now, 'loaded_value' contains the same value as the local variable and can be used as the result
-                //builder.build_return(loaded_value.unwrap().as_basic_value_enum());
                 println!("local.tee {}", local_index);
             }
 
