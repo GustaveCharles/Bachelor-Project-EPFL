@@ -10,7 +10,7 @@ use inkwell::{
 use wasmparser::OperatorsReader;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let wasm_file_path = "src/lib/write_std_opti.wasm";
+    let wasm_file_path = "src/lib/simplest_branch_nonOpti.wasm";
     let file = File::open(wasm_file_path)?;
     parse(file)?;
 
@@ -28,7 +28,12 @@ fn parse(mut reader: impl Read) -> Result<(), Box<dyn std::error::Error>> {
             Version { .. } => {
                 println!("====== Module");
             }
-            TypeSection(types) => {}
+            TypeSection(types) => {
+                for ty in types {
+                    let ty = ty?;
+                    println!("  Type {:?}", ty);
+                }
+            }
             ImportSection(imports) => {
                 for import in imports {
                     let import = import?;
@@ -90,6 +95,7 @@ fn parse(mut reader: impl Read) -> Result<(), Box<dyn std::error::Error>> {
                 while !reader.eof() {
                     let op = reader.read_operator();
                     println!("Operator: {:?}", op.unwrap())
+
                 }
                 // while !reader.eof() {
                 //     reader.visit_operator(&mut NopVisit)?;
