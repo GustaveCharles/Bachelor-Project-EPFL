@@ -14,7 +14,7 @@ use std::os::unix::process;
 use std::rc::Rc;
 use wasmparser::{
     BinaryReader, CodeSectionReader, FunctionBody, FunctionSectionReader, Global, Operator,
-    OperatorsReader, Parser, Payload,
+    OperatorsReader, Parser, Payload, StructuralType,
 };
 
 // ************************REGISTER BANK************************
@@ -36,12 +36,19 @@ struct CustomStruct<'a> {
     fn_value: FunctionValue<'a>,
 }
 
+struct FunTypes {
+    type_nb: usize,
+    params_nb: usize,
+    results_nb: usize,
+}
+
 struct Constructors<'a> {
     builer: Builder<'a>,
     context: Context,
     module: Module<'a>,
 }
 
+#[derive(Debug)]
 struct ActualBlocks<'a> {
     //builder: Builder<'a>,
     basic_block: BasicBlock<'a>,
@@ -74,7 +81,7 @@ impl<'a> RegisterBank<'a> {
             registers: HashMap::new(),
         }
     }
-
+    //registers will be 0 initialized
     fn create_register(&mut self, name: &str, value: Value<'a>) {
         // Create a new register with the provided value and insert it into the HashMap
         self.registers
@@ -112,10 +119,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut global_counter = 0;
     let mut function_counter = 0;
     let mut function_map: HashMap<String, CustomStruct> = HashMap::new();
-    let mut actual_blocks: HashMap<i32, ActualBlocks> = HashMap::new();  
 
     let parser = Parser::new(0);
-
+    //let mut fun_types: Vec<FuncType> = Vec::new();
+    let mut fun_types: HashMap<u32, FunTypes> = HashMap::new();
     let mut functions_parsed: Vec<u32> = Vec::new();
     let mut bodies: Vec<FunctionBody> = Vec::new();
     let mut globals: Vec<Global> = Vec::new();
@@ -127,13 +134,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 //TODO look if into_iter is okay
                 //types.extend(_types.into_iter().collect::<Result<Vec<_>, _>>()?);
                 for (i, fun_type) in _types.into_iter().enumerate() {
-                    println!("Function Type {}:", i);
-                    println!("  Parameters:");
                     for param_type in fun_type.unwrap().types() {
-                        println!("    {:?}", param_type);
-                        let val = &param_type.structural_type;
+                        //println!("    {:?}", param_type);
+                        let val: &[wasmparser::ValType];
+                        let val2: &[wasmparser::ValType];
+                        match &param_type.structural_type {
+                            StructuralType::Func(func_type) => {
+                                // You have access to the FuncType variant here
+                                // You can use func_type as needed
+                                val = func_type.params();
+                                val2 = func_type.results();
+
+                                fun_types.insert(
+                                    i as u32,
+                                    FunTypes {
+                                        type_nb: i,
+                                        params_nb: val.len(),
+                                        results_nb: val2.len(),
+                                    },
+                                );
+                            }
+                            _ => {}
+                        }
                     }
                 }
+            }
+            Ok(Payload::ImportSection(_imports)) => {
+                // Handle the import section here
+                //imports.extend(_imports.into_iter().collect::<Result<Vec<_>, _>>()?);
             }
             Ok(Payload::FunctionSection(functions)) => {
                 // Handle the function section here
@@ -159,172 +187,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Handle each function's operands here
         let name = "%F".to_string() + &function_counter.to_string();
         println!("-----------------------------------------");
-        println!("Function: {}", functions);
-        println!("Function name: {}", name);
 
         //TODO are there any more function types?
-        match functions {
-            0 => {
-                let fn_type = context.void_type().fn_type(&[], false);
-                let fn_value = module.add_function(name.as_str(), fn_type, None);
-                let basic_block = context.append_basic_block(fn_value, "entry");
-                let builder = context.create_builder();
-                builder.position_at_end(basic_block);
+        let i32_type = context.i32_type();
 
-                function_map.insert(
-                    name.clone(),
-                    CustomStruct {
-                        builder: builder,
-                        basic_block: basic_block,
-                        int_type: 0,
-                        fn_value: fn_value,
-                    },
-                );
+        let type_nb = fun_types.get(&functions).unwrap().type_nb;
+        let params_nb = fun_types.get(&functions).unwrap().params_nb;
+        let return_nb = fun_types.get(&functions).unwrap().results_nb;
 
-                actual_blocks.insert(0, ActualBlocks { basic_block: basic_block, function: fn_value });
-
-                function_counter += 1;
-            }
-            1 => {
-                //TODO is name okay
-                let fn_type: inkwell::types::FunctionType<'_> = context
-                    .void_type()
-                    .fn_type(&[context.i32_type().into()], false);
-                let fn_value = module.add_function(name.as_str(), fn_type, None);
-                let basic_block = context.append_basic_block(fn_value, "entry");
-                let builder = context.create_builder();
-                builder.position_at_end(basic_block);
-                //TODO pas besoin de ça car on a dejà function.get_params()
-                // let value: IntValue<'_> = fn_value.get_first_param().unwrap().into_int_value();
-                // let target_type = context.i32_type().ptr_type(inkwell::AddressSpace::from(0));
-                // let pointer_value = builder.build_int_to_ptr(
-                //     value,       // the integer value
-                //     target_type, // the target pointer type
-                //     "inttoptr",  // name for the generated instruction
-                // );
-
-                //builder.build_store(pointer_value.unwrap(), value); -- pas besoin je pense
-                //println!("Error: {:?}", err);
-
-                function_map.insert(
-                    name.clone(),
-                    CustomStruct {
-                        builder: builder,
-                        basic_block: basic_block,
-                        int_type: 1,
-                        fn_value: fn_value,
-                    },
-                );
-                //builder.build_return(None);
-
-                actual_blocks.insert(0, ActualBlocks { basic_block: basic_block, function: fn_value });
-
-
-                function_counter += 1;
-            }
-            2 => {
-                let i32_type = context.i32_type();
-                let fn_type: inkwell::types::FunctionType<'_> = i32_type.fn_type(&[], false);
-                let fn_value = module.add_function(name.as_str(), fn_type, None);
-                let basic_block = context.append_basic_block(fn_value, "entry");
-                let builder = context.create_builder();
-                builder.position_at_end(basic_block);
-
-                function_map.insert(
-                    name.clone(),
-                    CustomStruct {
-                        builder: builder,
-                        basic_block: basic_block,
-                        int_type: 2,
-                        fn_value: fn_value,
-                    },
-                );
-
-                actual_blocks.insert(0, ActualBlocks { basic_block: basic_block, function: fn_value });
-
-                function_counter += 1;
-            }
-            3 => {
-                let fn_type: inkwell::types::FunctionType<'_> = context
-                    .i32_type()
-                    .fn_type(&[context.i32_type().into()], false);
-                let fn_value = module.add_function(name.as_str(), fn_type, None);
-                let basic_block = context.append_basic_block(fn_value, "entry");
-                let builder = context.create_builder();
-                builder.position_at_end(basic_block);
-
-                function_map.insert(
-                    name.clone(),
-                    CustomStruct {
-                        builder: builder,
-                        basic_block: basic_block,
-                        int_type: 3,
-                        fn_value: fn_value,
-                    },
-                );
-
-                actual_blocks.insert(0, ActualBlocks { basic_block: basic_block, function: fn_value });
-
-
-                function_counter += 1;
-            }
-            4 => {
-                let i32_type = context.i32_type();
-                let fn_type: inkwell::types::FunctionType<'_> = i32_type.fn_type(
-                    &[
-                        i32_type.into(),
-                        i32_type.into(),
-                        i32_type.into(),
-                        i32_type.into(),
-                    ],
-                    false,
-                );
-                let fn_value = module.add_function(name.as_str(), fn_type, None);
-                let basic_block = context.append_basic_block(fn_value, "entry");
-                let builder = context.create_builder();
-                builder.position_at_end(basic_block);
-
-                function_map.insert(
-                    name.clone(),
-                    CustomStruct {
-                        builder: builder,
-                        basic_block: basic_block,
-                        int_type: 4,
-                        fn_value: fn_value,
-                    },
-                );
-
-                actual_blocks.insert(0, ActualBlocks { basic_block: basic_block, function: fn_value });
-
-                function_counter += 1;
-            }
-            5 => {
-                let i32_type = context.i32_type();
-                let fn_type: inkwell::types::FunctionType<'_> =
-                    i32_type.fn_type(&[i32_type.into(), i32_type.into(), i32_type.into()], false);
-                let fn_value = module.add_function(name.as_str(), fn_type, None);
-                let basic_block = context.append_basic_block(fn_value, "entry");
-                let builder = context.create_builder();
-                builder.position_at_end(basic_block);
-
-                function_map.insert(
-                    name.clone(),
-                    CustomStruct {
-                        builder: builder,
-                        basic_block: basic_block,
-                        int_type: 5,
-                        fn_value: fn_value,
-                    },
-                );
-
-                actual_blocks.insert(0, ActualBlocks { basic_block: basic_block, function: fn_value });
-
-                function_counter += 1;
-            }
-            _ => {
-                println!("Function type not found");
-            }
+        let mut metadata_vec: Vec<inkwell::types::BasicMetadataTypeEnum> = Vec::new();
+        for _ in 0..params_nb {
+            metadata_vec.push(i32_type.into());
         }
+        let fn_type: inkwell::types::FunctionType<'_>;
+
+        if return_nb == 1 {
+            fn_type = i32_type.fn_type(&metadata_vec, false);
+        } else {
+            fn_type = context.void_type().fn_type(&metadata_vec, false);
+        }
+
+        let fn_value = module.add_function(name.as_str(), fn_type, None);
+        let basic_block = context.append_basic_block(fn_value, "entry");
+        let builder = context.create_builder();
+        builder.position_at_end(basic_block);
+
+        function_map.insert(
+            name.clone(),
+            CustomStruct {
+                builder: builder,
+                basic_block: basic_block,
+                int_type: type_nb as i32,
+                fn_value: fn_value,
+            },
+        );
+
+        function_counter += 1;
     }
 
     println!("-------------------------GLOBAL SECTION------------------------------");
@@ -432,7 +330,15 @@ fn process_function_body_helper(
     let mut stack: Vec<Value> = Vec::new();
     let mut next = 0;
 
-    let mut actual_block = 0;
+    let mut actual_block_counter = 0;
+    let mut actual_blocks: HashMap<i32, ActualBlocks> = HashMap::new();
+    actual_blocks.insert(
+        actual_block_counter,
+        ActualBlocks {
+            basic_block: entry_bb,
+            function: function,
+        },
+    );
 
     let mut register_bank = RegisterBank::new();
     let parameters = function.get_params();
@@ -556,21 +462,47 @@ fn process_function_body_helper(
             }
 
             Operator::End => {
+                let current_block = actual_blocks.get(&actual_block_counter).unwrap();
+                if (actual_block_counter == 0) {
+                    //pas sur pcq pas vraiment besoin de faire de return je pense
+                    builder.build_return(None);
+                } else {
+                    let last_block = actual_blocks.get(&(actual_block_counter - 1)).unwrap();
+                    builder.position_at_end(last_block.basic_block);
+                    actual_block_counter -= 1;
+                }
 
                 println!("end");
             }
 
             Operator::Block { blockty } => {
+                let block = context.append_basic_block(function, "block");
+                builder.position_at_end(block);
+                actual_block_counter += 1;
+                actual_blocks.insert(
+                    actual_block_counter,
+                    ActualBlocks {
+                        basic_block: block,
+                        function: function,
+                    },
+                );
+
                 println!("block {:?}", blockty);
             }
 
             Operator::BrIf { relative_depth } => {
-                let branch_block = context.append_basic_block(function, "branch_target");
-                let continue_block = context.append_basic_block(function, "continue");
+                //branch block already exists
+                //a peu près
+                let branch_block = actual_blocks
+                    .get(&actual_block_counter)
+                    .unwrap()
+                    .basic_block;
+                let continue_block = context.append_basic_block(function, "else");
 
                 let value = stack.pop().unwrap();
                 let int_var = handle_value(value, context);
                 let _ = builder.build_conditional_branch(int_var, branch_block, continue_block);
+                builder.position_at_end(branch_block);
 
                 println!("br_if {}", relative_depth);
             }
@@ -621,11 +553,16 @@ fn process_function_body_helper(
 
                 println!("return");
             }
-
+            Operator::I32LtU => {
+                println!("i32.lt_u");
+            }
+            Operator::I32Eqz => {
+                println!("i32.eqz");
+            }
             // Handle other operators as needed
             _ => {
                 // Ignore unhandled operators for simplicity
-                println!("Unhandled operator: {:?}", code.read().unwrap());
+                //println!("Unhandled operator: {:?}");
             }
         }
     }
