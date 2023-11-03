@@ -34,8 +34,9 @@ struct CustomStruct<'a> {
     basic_block: BasicBlock<'a>,
     int_type: i32,
     fn_value: FunctionValue<'a>,
+    return_nb: usize,
 }
-
+#[derive(Debug)]
 struct FunTypes {
     type_nb: usize,
     params_nb: usize,
@@ -124,6 +125,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //let mut fun_types: Vec<FuncType> = Vec::new();
     let mut fun_types: HashMap<u32, FunTypes> = HashMap::new();
     let mut functions_parsed: Vec<u32> = Vec::new();
+    let mut imports_parsed: Vec<u32> = Vec::new();
     let mut bodies: Vec<FunctionBody> = Vec::new();
     let mut globals: Vec<Global> = Vec::new();
 
@@ -161,11 +163,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             Ok(Payload::ImportSection(_imports)) => {
                 // Handle the import section here
-                //imports.extend(_imports.into_iter().collect::<Result<Vec<_>, _>>()?);
+                for import in _imports {
+                    let import = import?;
+                    println!(
+                        "  Import {}::{} %F{} Function Type: {:?}",
+                        import.module, import.name, function_counter, import.ty
+                    );
+                    match import.ty {
+                        wasmparser::TypeRef::Func(_func_type) => {
+                            imports_parsed.push(_func_type);
+                        }
+                        _ => {}
+                    }
+                }
             }
             Ok(Payload::FunctionSection(functions)) => {
                 // Handle the function section here
                 //TODO look if into_iter is okay
+
                 functions_parsed.extend(functions.into_iter().collect::<Result<Vec<_>, _>>()?);
             }
 
@@ -182,7 +197,51 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    println!("----------------------IMPORTS-------------------");
+    let imports_length = imports_parsed.len();
+    for imports in imports_parsed {
+        let name = "%F".to_string() + &function_counter.to_string();
+        println!("-----------------------------------------");
+        println!("Import: {:?}", imports);
+        let i32_type = context.i32_type();
+
+        let type_nb = fun_types.get(&imports).unwrap().type_nb;
+        let params_nb = fun_types.get(&imports).unwrap().params_nb;
+        let return_nb = fun_types.get(&imports).unwrap().results_nb;
+
+        let mut metadata_vec: Vec<inkwell::types::BasicMetadataTypeEnum> = Vec::new();
+        for _ in 0..params_nb {
+            metadata_vec.push(i32_type.into());
+        }
+        let fn_type: inkwell::types::FunctionType<'_>;
+
+        if return_nb == 1 {
+            fn_type = i32_type.fn_type(&metadata_vec, false);
+        } else {
+            fn_type = context.void_type().fn_type(&metadata_vec, false);
+        }
+
+        let fn_value = module.add_function(name.as_str(), fn_type, None);
+        let basic_block = context.append_basic_block(fn_value, "entry");
+        let builder = context.create_builder();
+        builder.position_at_end(basic_block);
+
+        function_map.insert(
+            name.clone(),
+            CustomStruct {
+                builder: builder,
+                basic_block: basic_block,
+                int_type: type_nb as i32,
+                fn_value: fn_value,
+                return_nb: return_nb,
+            },
+        );
+
+        function_counter += 1;
+    }
+
     println!("----------------------FUNCTION TYPE-------------------");
+
     for functions in functions_parsed {
         // Handle each function's operands here
         let name = "%F".to_string() + &function_counter.to_string();
@@ -220,6 +279,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 basic_block: basic_block,
                 int_type: type_nb as i32,
                 fn_value: fn_value,
+                return_nb: return_nb,
             },
         );
 
@@ -244,7 +304,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("-------------------------FUNCTION BODY------------------------------");
-    let mut function_counter = 0;
+    let mut function_counter = imports_length as i32;
     for body in bodies {
         println!("Function body instructions:");
 
@@ -302,6 +362,7 @@ fn process_function_body(
             let int_type = value.int_type;
             println!("Function type: {}", int_type);
             let fn_value = value.fn_value;
+            let return_nb = value.return_nb;
             builder.position_at_end(basic_block);
             process_function_body_helper(
                 &mut code,
@@ -311,6 +372,7 @@ fn process_function_body(
                 basic_block,
                 fn_value,
                 function_map,
+                return_nb,
             );
         }
         None => {
@@ -327,6 +389,7 @@ fn process_function_body_helper(
     entry_bb: BasicBlock,
     function: FunctionValue<'_>,
     function_map: &HashMap<String, CustomStruct>,
+    return_nb: usize,
 ) {
     let mut stack: Vec<Value> = Vec::new();
     let mut bb_stack: Vec<BasicBlock> = Vec::new();
@@ -354,15 +417,29 @@ fn process_function_body_helper(
             }
             Operator::Call { function_index } => {
                 //TODO régler le problème de l'index de la fonction appelée et ce sera bon je pense
-                // let name = format!("%F{}", function_index-2);
-                // let called_function = function_map.get(&name);
-                // let nb_args = called_function.unwrap().fn_value.count_params();
-                // let mut args: Vec<BasicMetadataValueEnum> = Vec::new();
-                // for _ in 0..nb_args {
-                //     let arg: Value<'_> = stack.pop().unwrap();
-                //     args.push(BasicMetadataValueEnum::IntValue((handle_value(arg, context))));
-                // }
-                // builder.build_call(called_function.unwrap().fn_value, &args, &name);
+                let name = format!("%F{}", function_index);
+                let called_function = function_map.get(&name);
+                let nb_args = called_function.unwrap().fn_value.count_params();
+                let mut args: Vec<BasicMetadataValueEnum> = Vec::new();
+                for _ in 0..nb_args {
+                    let arg: Value<'_> = stack.pop().unwrap();
+                    args.push(BasicMetadataValueEnum::IntValue(
+                        (handle_value(arg, context)),
+                    ));
+                }
+                let ret_val = builder
+                    .build_direct_call(called_function.unwrap().fn_value, &args, &name)
+                    .unwrap()
+                    .try_as_basic_value()
+                    .left();
+
+                match ret_val {
+                    Some(val) => {
+                        stack.push(Value::Basic(val));
+                    }
+                    None => {}
+                }
+
                 println!("call {}", function_index);
             }
             Operator::I32Add => {
@@ -554,9 +631,13 @@ fn process_function_body_helper(
                 let int_value_lhs = handle_value(left, context);
                 let int_value_rhs = handle_value(right, context);
 
-                let result =
-                    builder.build_int_compare(inkwell::IntPredicate::UGT, int_value_lhs, int_value_rhs, next.to_string().as_str());
-                
+                let result = builder.build_int_compare(
+                    inkwell::IntPredicate::UGT,
+                    int_value_lhs,
+                    int_value_rhs,
+                    next.to_string().as_str(),
+                );
+
                 stack.push(Value::IntVar(result.unwrap()));
 
                 println!("i32.gt_u");
@@ -568,9 +649,13 @@ fn process_function_body_helper(
                 let int_value_lhs = handle_value(left, context);
                 let int_value_rhs = handle_value(right, context);
 
-                let result =
-                    builder.build_int_compare(inkwell::IntPredicate::ULT, int_value_lhs, int_value_rhs, next.to_string().as_str());
-                
+                let result = builder.build_int_compare(
+                    inkwell::IntPredicate::ULT,
+                    int_value_lhs,
+                    int_value_rhs,
+                    next.to_string().as_str(),
+                );
+
                 stack.push(Value::IntVar(result.unwrap()));
 
                 println!("i32.lt_u");
@@ -578,7 +663,7 @@ fn process_function_body_helper(
             Operator::I32Eqz => {
                 let value = stack.pop().unwrap();
                 let int_var = handle_value(value, context);
-                let zero = context.i32_type().const_int(0, false); 
+                let zero = context.i32_type().const_int(0, false);
                 let one = context.i32_type().const_int(1, false);
                 let res = int_var.eq(&zero);
                 match res {
@@ -598,6 +683,14 @@ fn process_function_body_helper(
             }
         }
     }
+    if return_nb ==1 {
+        let value = stack.pop();
+        builder.build_return(Some(&handle_value(value.unwrap(), context).as_basic_value_enum()));
+    }
+    else {
+        builder.build_return(None);
+    }
+
 }
 
 fn handle_value<'a>(rhs: Value<'a>, context: &'a Context) -> IntValue<'a> {
@@ -605,6 +698,13 @@ fn handle_value<'a>(rhs: Value<'a>, context: &'a Context) -> IntValue<'a> {
         Value::IntVar(int_var) => int_var.as_basic_value_enum().into_int_value(),
         Value::I32Const(int_const) => context.i32_type().const_int(int_const as u64, false),
         Value::Global(global_var) => global_var.as_basic_value_enum().into_int_value(),
+        Value::Basic(basic_value) => match basic_value {
+            BasicValueEnum::IntValue(int_value) => int_value,
+            _ => {
+                // Handle other cases or provide a default value if necessary
+                panic!("Value cannot be transformed into IntMathValue");
+            }
+        },
         _ => {
             // Handle other cases or provide a default value if necessary
             panic!("Value cannot be transformed into IntMathValue");

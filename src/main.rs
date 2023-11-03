@@ -37,7 +37,7 @@ fn parse(mut reader: impl Read) -> Result<(), Box<dyn std::error::Error>> {
             ImportSection(imports) => {
                 for import in imports {
                     let import = import?;
-                    println!("  Import {}::{}", import.module, import.name);
+                    println!("  Import {}::{} -- Import type{:?}", import.module, import.name, import.ty);
                 }
             }
             FunctionSection(types) => { 
