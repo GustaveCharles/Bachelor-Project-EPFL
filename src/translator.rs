@@ -97,10 +97,10 @@ impl<'a> RegisterBank<'a> {
         // Write a value to a register by name
         if let Some(register) = self.registers.get_mut(name) {
             register.value = value;
-            println!("slt true");
+            println!("REGISTER WRITE TRUE");
             true
         } else {
-            println!("slt false");
+            println!("REGISTER WRITE FALSE");
             false
         }
     }
@@ -187,6 +187,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Handle each function's operands here
         let name = "%F".to_string() + &function_counter.to_string();
         println!("-----------------------------------------");
+        println!("Function name: {:?}", name);
 
         //TODO are there any more function types?
         let i32_type = context.i32_type();
@@ -328,29 +329,25 @@ fn process_function_body_helper(
     function_map: &HashMap<String, CustomStruct>,
 ) {
     let mut stack: Vec<Value> = Vec::new();
+    let mut bb_stack: Vec<BasicBlock> = Vec::new();
+    let mut current_block = entry_bb;
     let mut next = 0;
-
-    let mut actual_block_counter = 0;
-    let mut actual_blocks: HashMap<i32, ActualBlocks> = HashMap::new();
-    actual_blocks.insert(
-        actual_block_counter,
-        ActualBlocks {
-            basic_block: entry_bb,
-            function: function,
-        },
-    );
 
     let mut register_bank = RegisterBank::new();
     let parameters = function.get_params();
+    let value1 = context.i32_type().const_int(5, false);
+    register_bank.create_register("%R0", Value::IntVar(value1));
     for value in parameters {
         let name = format!("%R{}", next);
-        let value = Value::IntVar(value.into_int_value());
-        register_bank.create_register(&name, value);
+        let value2 = Value::IntVar(value.into_int_value());
+        register_bank.create_register(&name, value2);
         next += 1;
     }
 
     while !code.eof() {
-        match code.read().unwrap() {
+        let val_to_read = code.read().unwrap();
+
+        match val_to_read {
             Operator::I32Const { value } => {
                 stack.push(Value::I32Const(value));
                 println!("i32.const {}", value);
@@ -443,7 +440,6 @@ fn process_function_body_helper(
                 let name = format!("%R{}", local_index);
                 let register_val = register_bank.read_register(&name);
                 let register_val_cloned = register_val.clone();
-                //println!("register bank: {:?}", register_bank);
 
                 stack.push(*register_val_cloned.unwrap());
 
@@ -455,54 +451,52 @@ fn process_function_body_helper(
                 let value_to_store = local_var.clone();
                 stack.push(value_to_store);
                 let name = format!("%R{}", local_index);
-                register_bank.create_register(&name, local_var);
-                //println!("register bank: {:?}", register_bank);
+                register_bank.write_register(&name, local_var);
 
                 println!("local.tee {}", local_index);
             }
 
+            Operator::LocalSet { local_index } => {
+                let local_var = stack.pop().unwrap();
+                let name = format!("%R{}", local_index);
+                register_bank.write_register(&name, local_var);
+
+                println!("local.set {}", local_index);
+            }
+
             Operator::End => {
-                let current_block = actual_blocks.get(&actual_block_counter).unwrap();
-                if (actual_block_counter == 0) {
-                    //pas sur pcq pas vraiment besoin de faire de return je pense
-                    builder.build_return(None);
-                } else {
-                    let last_block = actual_blocks.get(&(actual_block_counter - 1)).unwrap();
-                    builder.position_at_end(last_block.basic_block);
-                    actual_block_counter -= 1;
+                if bb_stack.len() == 0 {
+                    break;
                 }
+                let block = bb_stack.pop().unwrap();
+                builder.build_unconditional_branch(block);
+                builder.position_at_end(block);
+                current_block = block;
 
                 println!("end");
             }
 
             Operator::Block { blockty } => {
+                bb_stack.push(current_block);
                 let block = context.append_basic_block(function, "block");
                 builder.position_at_end(block);
-                actual_block_counter += 1;
-                actual_blocks.insert(
-                    actual_block_counter,
-                    ActualBlocks {
-                        basic_block: block,
-                        function: function,
-                    },
-                );
+                current_block = block;
 
                 println!("block {:?}", blockty);
             }
 
             Operator::BrIf { relative_depth } => {
-                //branch block already exists
-                //a peu près
-                let branch_block = actual_blocks
-                    .get(&actual_block_counter)
-                    .unwrap()
-                    .basic_block;
+                println!("bb_stack: {:?}", bb_stack);
+                let branch_block = bb_stack
+                    .get(bb_stack.len() - 1 - (relative_depth as usize))
+                    .unwrap();
                 let continue_block = context.append_basic_block(function, "else");
 
                 let value = stack.pop().unwrap();
                 let int_var = handle_value(value, context);
-                let _ = builder.build_conditional_branch(int_var, branch_block, continue_block);
-                builder.position_at_end(branch_block);
+                let _ = builder.build_conditional_branch(int_var, *branch_block, continue_block);
+                builder.position_at_end(continue_block);
+                current_block = continue_block;
 
                 println!("br_if {}", relative_depth);
             }
@@ -553,16 +547,54 @@ fn process_function_body_helper(
 
                 println!("return");
             }
+            Operator::I32GtU => {
+                let left = stack.pop().unwrap();
+                let right = stack.pop().unwrap();
+
+                let int_value_lhs = handle_value(left, context);
+                let int_value_rhs = handle_value(right, context);
+
+                let result =
+                    builder.build_int_compare(inkwell::IntPredicate::UGT, int_value_lhs, int_value_rhs, next.to_string().as_str());
+                
+                stack.push(Value::IntVar(result.unwrap()));
+
+                println!("i32.gt_u");
+            }
             Operator::I32LtU => {
+                let left = stack.pop().unwrap();
+                let right = stack.pop().unwrap();
+
+                let int_value_lhs = handle_value(left, context);
+                let int_value_rhs = handle_value(right, context);
+
+                let result =
+                    builder.build_int_compare(inkwell::IntPredicate::ULT, int_value_lhs, int_value_rhs, next.to_string().as_str());
+                
+                stack.push(Value::IntVar(result.unwrap()));
+
                 println!("i32.lt_u");
             }
             Operator::I32Eqz => {
+                let value = stack.pop().unwrap();
+                let int_var = handle_value(value, context);
+                let zero = context.i32_type().const_int(0, false); 
+                let one = context.i32_type().const_int(1, false);
+                let res = int_var.eq(&zero);
+                match res {
+                    true => {
+                        stack.push(Value::IntVar(one));
+                    }
+                    false => {
+                        stack.push(Value::IntVar(zero));
+                    }
+                }
                 println!("i32.eqz");
             }
             // Handle other operators as needed
             _ => {
                 // Ignore unhandled operators for simplicity
-                //println!("Unhandled operator: {:?}");
+                println!("Unhandled operator: {:?}", val_to_read);
             }
         }
     }
