@@ -10,11 +10,6 @@ name = "main"
 path = "src/main.rs"
 
 [[bin]]
-name = "hello_world_ink"
-path = "src/hello_world_ink.rs"
-
-
-[[bin]]
 name = "hello"
 path = "src/new_hello.rs"
 

@@ -1,0 +1,38 @@
+	.section	__TEXT,__text,regular,pure_instructions
+	.build_version macos, 14, 0
+	.globl	"_%F1"                          ; -- Begin function %F1
+	.p2align	2
+"_%F1":                                 ; @"%F1"
+	.cfi_startproc
+; %bb.0:                                ; %entry
+	stp	x29, x30, [sp, #-16]!           ; 16-byte Folded Spill
+	.cfi_def_cfa_offset 16
+	.cfi_offset w30, -8
+	.cfi_offset w29, -16
+	mov	w8, #8                          ; =0x8
+Lloh0:
+	adrp	x9, _memory@PAGE
+Lloh1:
+	add	x9, x9, _memory@PAGEOFF
+	mov	w10, #12                        ; =0xc
+	mov	w0, #1                          ; =0x1
+	mov	w1, wzr
+	mov	w2, #1                          ; =0x1
+	mov	w3, #20                         ; =0x14
+	str	w8, [x9, #64]
+	str	w8, [x9]
+	str	w10, [x9, #96]
+	str	w10, [x9, #32]
+	bl	_fd_write
+	ldp	x29, x30, [sp], #16             ; 16-byte Folded Reload
+	ret
+	.loh AdrpAdd	Lloh0, Lloh1
+	.cfi_endproc
+                                        ; -- End function
+	.section	__DATA,__data
+	.globl	_memory                         ; @memory
+	.p2align	4, 0x0
+_memory:
+	.asciz	"\b\000\000\000\f\000\000\000hello world\n\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
+
+.subsections_via_symbols

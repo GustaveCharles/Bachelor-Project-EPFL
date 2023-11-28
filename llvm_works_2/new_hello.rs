@@ -62,11 +62,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Write the LLVM IR to a file
     module.verify().unwrap();
     let ir_string = module.print_to_string().to_string();
-    let mut file = File::create("hello_works.ll").expect("Failed to create file");
+    let mut file = File::create("hello_works_test_ink.ll").expect("Failed to create file");
     file.write_all(ir_string.as_bytes())
         .expect("Failed to write to file");
 
-    println!("LLVM IR has been written to hello_works.ll");
+    println!("LLVM IR has been written to hello_works_test.ll");
 
     Ok(())
 }

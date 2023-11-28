@@ -1,13 +1,10 @@
-; ModuleID = 'hello'
-source_filename = "hello"
+; ModuleID = 'sum'
+source_filename = "sum"
+target datalayout = "e-m:o-i64:64-i128:128-n32:64-S128"
 
-@message = external global [13 x i8]
-
-define void @main() {
+define i64 @main(i64 %0, i64 %1, i64 %2) {
 entry:
-  store [13 x i8] c"Hello, World!", ptr @message, align 1
-  %puts = call i32 @puts([13 x i8] c"Hello, World!")
-  ret void
+  %sum = add i64 %0, %1
+  %sum1 = add i64 %sum, %2
+  ret i64 %sum1
 }
-
-declare i32 @puts(ptr)

@@ -10,7 +10,7 @@ use inkwell::{
 use wasmparser::OperatorsReader;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let wasm_file_path = "src/lib/simplest_branch_nonOpti.wasm";
+    let wasm_file_path = "src/lib/gcd.wasm";
     let file = File::open(wasm_file_path)?;
     parse(file)?;
 
@@ -65,11 +65,14 @@ fn parse(mut reader: impl Read) -> Result<(), Box<dyn std::error::Error>> {
             ElementSection(elements) => { /* ... */ }
             DataCountSection { .. } => { /* ... */ }
             DataSection(data) => {
+                println!("====== Data");
                 for item in data {
                     let item = item?;
+                    println!("  Data {:?}", item.data);
                     if let DataKind::Active { offset_expr, .. } = item.kind {
                         for op in offset_expr.get_operators_reader() {
-                            op?;
+                            let op = op?;
+                            println!("  Data {:?}", op);
                         }
                     }
                 }
