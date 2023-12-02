@@ -5,7 +5,7 @@ use inkwell::types::{AnyTypeEnum, BasicTypeEnum, PointerType};
 use inkwell::values::{ArrayValue, BasicMetadataValueEnum, BasicValue, GlobalValue, PointerValue};
 use inkwell::values::{BasicValueEnum, FloatValue, FunctionValue, IntValue};
 use inkwell::{builder::Builder, context::Context, module::Module};
-use inkwell::{context, AddressSpace, IntPredicate};
+use inkwell::{context, AddressSpace, IntPredicate, builder};
 use std::cell::Ref;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -49,7 +49,7 @@ struct FunTypes {
     params_nb: usize,
     results_nb: usize,
 }
-#[derive(Debug)]
+#[derive(Copy,Clone,Debug)]
 struct BBStruct<'a> {
     basic_block: BasicBlock<'a>,
     loop_block: usize,
@@ -87,7 +87,7 @@ impl<'a> Register<'a> {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let context = Context::create();
     let module = context.create_module("hello-translation");
-    let wasm_bytes = std::fs::read("src/lib/hello_demo.wasm").expect("Unable to read wasm file");
+    let wasm_bytes = std::fs::read("src/lib/gcd.wasm").expect("Unable to read wasm file");
     inkwell::targets::Target::initialize_all(&Default::default());
     // Parse the Wasm module
     // Iterate through the functions in the module
@@ -105,7 +105,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut globals: Vec<Global> = Vec::new();
     let i8_type = context.i8_type();
     let mut global_values_arr = vec![i8_type.const_zero(); 3000];
-
+    
     let mut memory_val: GlobalValue =
         module.add_global(context.i8_type().array_type(0), None, "my_global_var");
 
@@ -555,7 +555,6 @@ fn process_function_body_helper<'ctx>(
                     let arg: Value<'_> = stack.pop().unwrap();
                     args.push(BasicMetadataValueEnum::IntValue(handle_value(arg, context)));
                 }
-                println!("args {:?}", args);
                 let ret_val = builder
                     .build_direct_call(called_function.unwrap().fn_value, &args, &name)
                     .unwrap()
@@ -701,17 +700,17 @@ fn process_function_body_helper<'ctx>(
                 }
 
                 let block = bb_stack.pop().unwrap();
-                println!("BB_STACK IN END: {:?}", bb_stack);
-                println!("BLOCK FROM STACK IN END: {:?}", block);
+                //println!("BB_STACK IN END: {:?}", bb_stack);
+                //println!("BLOCK FROM STACK IN END: {:?}", block);
                 if block.loop_block != 1 {
-                    println!("CURRENT BLOCK IN END: {:?}", current_block);
-                    println!(
-                        "PREV INSTRUCTION IS BRANCH: {:?}",
-                        prev_instruction_is_branch
-                    );
+                    //println!("CURRENT BLOCK IN END: {:?}", current_block);
+                    //println!(
+                    //    "PREV INSTRUCTION IS BRANCH: {:?}",
+                    //    prev_instruction_is_branch
+                    //);
                     if (prev_instruction_is_branch == false) {
                         let instr = builder.build_unconditional_branch(block.basic_block);
-                        println!("INSTRUCTION IN END: {:?}", instr);
+                        //println!("INSTRUCTION IN END: {:?}", instr);
                     }
                     builder.position_at_end(block.basic_block);
                     current_block = BBStruct {
@@ -719,13 +718,15 @@ fn process_function_body_helper<'ctx>(
                         loop_block: 0,
                     };
                     prev_instruction_is_branch = false;
+                }else {
+                    bb_stack.pop();
                 }
                 println!("end");
             }
 
             Operator::Loop { blockty } => {
                 bb_stack.push(current_block);
-                println!("bb_stack in loop: {:?}", bb_stack);
+                //println!("bb_stack in loop: {:?}", bb_stack);
                 let block = context.append_basic_block(function, "loop");
                 builder.build_unconditional_branch(block);
                 builder.position_at_end(block);
@@ -733,7 +734,7 @@ fn process_function_body_helper<'ctx>(
                     basic_block: block,
                     loop_block: 1,
                 };
-
+                bb_stack.push(current_block);
                 next += 1;
 
                 println!("loop {:?}", blockty);
@@ -745,7 +746,7 @@ fn process_function_body_helper<'ctx>(
                     basic_block: (after_block),
                     loop_block: (0),
                 });
-                println!("bb_stack in block{:?}", bb_stack);
+                //println!("bb_stack in block{:?}", bb_stack);
                 // let block = context.append_basic_block(function, "block");
                 // builder.position_at_end(block);
                 // current_block = block;
@@ -996,6 +997,7 @@ fn process_function_body_helper<'ctx>(
 
                 //>TODO
                 //build_instert_element(array global, element, index, name)
+                //builder.build_insert_value(global_values_arr, value, index, name);
                 //index peut etre intvalue
                 //array global to vector value
 
