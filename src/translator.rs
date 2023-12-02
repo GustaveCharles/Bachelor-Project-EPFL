@@ -1,11 +1,11 @@
 extern crate wasmparser;
-use inkwell::basic_block::{BasicBlock, self};
-use inkwell::{context, AddressSpace};
+use inkwell::basic_block::{self, BasicBlock};
 use inkwell::module::{self, Linkage};
 use inkwell::types::{AnyTypeEnum, BasicTypeEnum, PointerType};
-use inkwell::values::{BasicMetadataValueEnum, BasicValue, PointerValue, GlobalValue, ArrayValue};
+use inkwell::values::{ArrayValue, BasicMetadataValueEnum, BasicValue, GlobalValue, PointerValue};
 use inkwell::values::{BasicValueEnum, FloatValue, FunctionValue, IntValue};
 use inkwell::{builder::Builder, context::Context, module::Module};
+use inkwell::{context, AddressSpace, IntPredicate};
 use std::cell::Ref;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -43,7 +43,7 @@ struct CustomStruct<'a> {
     return_nb: usize,
     regiser_number: usize,
 }
-#[derive(Copy,Clone,Debug)]
+#[derive(Copy, Clone, Debug)]
 struct FunTypes {
     type_nb: usize,
     params_nb: usize,
@@ -87,8 +87,7 @@ impl<'a> Register<'a> {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let context = Context::create();
     let module = context.create_module("hello-translation");
-    let wasm_bytes =
-        std::fs::read("src/lib/gcd.wasm").expect("Unable to read wasm file");
+    let wasm_bytes = std::fs::read("src/lib/hello_demo.wasm").expect("Unable to read wasm file");
     inkwell::targets::Target::initialize_all(&Default::default());
     // Parse the Wasm module
     // Iterate through the functions in the module
@@ -105,10 +104,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut bodies: Vec<FunctionBody> = Vec::new();
     let mut globals: Vec<Global> = Vec::new();
     let i8_type = context.i8_type();
-    let mut global_values_arr = vec![i8_type.const_zero(); 100];
+    let mut global_values_arr = vec![i8_type.const_zero(); 3000];
 
-
-    let mut memory_val: GlobalValue = module.add_global(context.i8_type().array_type(0), None, "my_global_var");
+    let mut memory_val: GlobalValue =
+        module.add_global(context.i8_type().array_type(0), None, "my_global_var");
 
     for payload in parser.parse_all(&wasm_bytes) {
         match payload {
@@ -124,11 +123,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let i8_type = context.i8_type();
                 //let array_type = i8_type.array_type(total_memory_size_bytes as u32 );
                 //for testing purposes
-                let array_type = i8_type.array_type(100 as u32 );
+                let array_type = i8_type.array_type(3000 as u32);
                 memory_val = module.add_global(array_type, None, "memory");
                 memory_val.set_constant(false);
                 memory_val.set_linkage(Linkage::External);
-
             }
             Ok(Payload::TypeSection(_types)) => {
                 // Handle the type section here
@@ -172,7 +170,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     match import.ty {
                         wasmparser::TypeRef::Func(_func_type) => {
                             imports_parsed.push(_func_type);
-                            
                         }
 
                         _ => {}
@@ -207,19 +204,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 for item in _data {
                     let item = item?;
                     println!("  Data {:?}", item.data);
-                    if let wasmparser::DataKind::Active {memory_index, offset_expr } = item.kind {
+                    if let wasmparser::DataKind::Active {
+                        memory_index,
+                        offset_expr,
+                    } = item.kind
+                    {
                         for op in offset_expr.get_operators_reader() {
                             let op = op?;
                             println!("  Data {:?}", op);
                             match op {
                                 Operator::I32Const { value } => {
                                     println!("i32.const {}", value);
-                                    initialize_memory(&context, memory_val,&mut global_values_arr, item.data, value as u32);
+                                    initialize_memory(
+                                        &context,
+                                        memory_val,
+                                        &mut global_values_arr,
+                                        item.data,
+                                        value as u32,
+                                    );
                                 }
                                 _ => {}
                             }
-                            
-
                         }
                     }
                 }
@@ -252,7 +257,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             fn_type = context.void_type().fn_type(&metadata_vec, false);
         }
 
-        let fn_value = module.add_function(import_names.get(index).unwrap(), fn_type, Some(Linkage::DLLImport));
+        let fn_value = module.add_function(
+            import_names.get(index).unwrap(),
+            fn_type,
+            Some(Linkage::DLLImport),
+        );
         // let basic_block = context.append_basic_block(fn_value, "entry");
         let builder = context.create_builder();
         // builder.position_at_end(basic_block);
@@ -330,11 +339,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         //let type = g.unwrap().ty;
         println!("Global type: {:?}", val);
         let name = format!("%G{}", global_counter);
-        let value = module_ref.add_global(
-            context.i32_type(),
-            None,
-            name.as_str(),
-        );
+        let value = module_ref.add_global(context.i32_type(), None, name.as_str());
         value.set_initializer(&context.i32_type().const_int(66592, false));
         value.set_constant(false);
         println!("Global: {:?}", name);
@@ -354,7 +359,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .regiser_number = local.unwrap().0 as usize;
         }
 
-        process_function_body(&body, &context, &module, &function_map, function_counter, memory_val, &mut global_values_arr);
+        process_function_body(
+            &body,
+            &context,
+            &module,
+            &function_map,
+            function_counter,
+            memory_val,
+            &mut global_values_arr,
+        );
         function_counter += 1;
     }
 
@@ -376,10 +389,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-
-fn allocate_memory(){
-
-}
+fn allocate_memory() {}
 // //TODO Error handling?
 // fn handle_function_type<'ctx>(
 //     function: u32,
@@ -432,7 +442,7 @@ fn process_function_body<'ctx>(
                 return_nb,
                 register_nb,
                 memory_value,
-                global_values_arr
+                global_values_arr,
             );
         }
         None => {
@@ -441,13 +451,12 @@ fn process_function_body<'ctx>(
     }
 }
 
-
 fn initialize_memory<'ctx>(
-    context: &'ctx Context, 
-    memory: GlobalValue<'ctx>, 
-    values: &mut Vec<IntValue<'ctx>>, 
-    data: &[u8], 
-    memory_index: u32
+    context: &'ctx Context,
+    memory: GlobalValue<'ctx>,
+    values: &mut Vec<IntValue<'ctx>>,
+    data: &[u8],
+    memory_index: u32,
 ) {
     let i8_type = context.i8_type();
 
@@ -455,7 +464,6 @@ fn initialize_memory<'ctx>(
         values[memory_index as usize + i] = i8_type.const_int(byte as u64, false);
     }
     let initializer = i8_type.const_array(&values);
-    println!("Initializer: {:?}", initializer);
     memory.set_initializer(&initializer);
 }
 
@@ -467,7 +475,7 @@ fn initialize_memory<'ctx>(
 //         // Shift the value right by i*8 bits and then truncate to i8
 //         let shifted = value.const_ashr(i8_type.const_int(8 * i, false));
 //         let byte = shifted.const_truncate(i8_type);
-        
+
 //         bytes.push(byte);
 //     }
 
@@ -475,7 +483,6 @@ fn initialize_memory<'ctx>(
 // }
 
 fn i32_to_i8s(input: i32) -> Vec<u8> {
-
     let mut tmp = Vec::new();
 
     tmp.push((input & 0xff) as u8);
@@ -507,9 +514,13 @@ fn process_function_body_helper<'ctx>(
     };
     let mut pointer_value: PointerValue = memory_value.as_pointer_value();
     let mut bb_stack: Vec<BBStruct> = Vec::new();
-    let mut current_block = BBStruct {basic_block: entry_bb, loop_block: 0};
+    let mut current_block = BBStruct {
+        basic_block: entry_bb,
+        loop_block: 0,
+    };
     let mut next = 0;
     let mut register_bank: Vec<PointerValue> = Vec::new();
+    let mut prev_instruction_is_branch = false;
 
     for value in function.get_params() {
         let name = format!("%R{}_{}", next, function_counter);
@@ -690,19 +701,38 @@ fn process_function_body_helper<'ctx>(
                 }
 
                 let block = bb_stack.pop().unwrap();
+                println!("BB_STACK IN END: {:?}", bb_stack);
+                println!("BLOCK FROM STACK IN END: {:?}", block);
                 if block.loop_block != 1 {
-                    builder.build_unconditional_branch(block.basic_block);
+                    println!("CURRENT BLOCK IN END: {:?}", current_block);
+                    println!(
+                        "PREV INSTRUCTION IS BRANCH: {:?}",
+                        prev_instruction_is_branch
+                    );
+                    if (prev_instruction_is_branch == false) {
+                        let instr = builder.build_unconditional_branch(block.basic_block);
+                        println!("INSTRUCTION IN END: {:?}", instr);
+                    }
                     builder.position_at_end(block.basic_block);
-                    current_block = BBStruct{basic_block: block.basic_block, loop_block: 0};
+                    current_block = BBStruct {
+                        basic_block: block.basic_block,
+                        loop_block: 0,
+                    };
+                    prev_instruction_is_branch = false;
                 }
                 println!("end");
             }
 
             Operator::Loop { blockty } => {
                 bb_stack.push(current_block);
+                println!("bb_stack in loop: {:?}", bb_stack);
                 let block = context.append_basic_block(function, "loop");
+                builder.build_unconditional_branch(block);
                 builder.position_at_end(block);
-                current_block = BBStruct{basic_block: block, loop_block: 1};                
+                current_block = BBStruct {
+                    basic_block: block,
+                    loop_block: 1,
+                };
 
                 next += 1;
 
@@ -711,7 +741,11 @@ fn process_function_body_helper<'ctx>(
 
             Operator::Block { blockty } => {
                 let after_block = context.append_basic_block(function, "after_end");
-                bb_stack.push(BBStruct { basic_block: (after_block), loop_block: (0) });
+                bb_stack.push(BBStruct {
+                    basic_block: (after_block),
+                    loop_block: (0),
+                });
+                println!("bb_stack in block{:?}", bb_stack);
                 // let block = context.append_basic_block(function, "block");
                 // builder.position_at_end(block);
                 // current_block = block;
@@ -728,9 +762,22 @@ fn process_function_body_helper<'ctx>(
                 let value = stack.pop().unwrap();
                 let int_var = handle_value(value, context);
                 //cast every i32
-                let _ = builder.build_conditional_branch(int_var, branch_block.basic_block, continue_block);
+                let cmp = builder.build_int_compare(
+                    IntPredicate::NE,
+                    int_var,
+                    context.i32_type().const_int(0, false),
+                    "cmpeq",
+                );
+                let _ = builder.build_conditional_branch(
+                    cmp.unwrap(),
+                    branch_block.basic_block,
+                    continue_block,
+                );
                 builder.position_at_end(continue_block);
-                current_block = BBStruct{basic_block: continue_block, loop_block: 0};
+                current_block = BBStruct {
+                    basic_block: continue_block,
+                    loop_block: 0,
+                };
 
                 println!("br_if {}", relative_depth);
             }
@@ -740,9 +787,7 @@ fn process_function_body_helper<'ctx>(
                     .get(bb_stack.len() - 1 - (relative_depth as usize))
                     .unwrap();
                 let _ = builder.build_unconditional_branch(branch_block.basic_block);
-                builder.position_at_end(branch_block.basic_block);
-                current_block = BBStruct{basic_block: branch_block.basic_block, loop_block: 0};
-
+                prev_instruction_is_branch = true;
                 println!("br {}", relative_depth);
             }
 
@@ -910,32 +955,51 @@ fn process_function_body_helper<'ctx>(
 
                 println!("i32.eq");
             }
-            Operator::I32Store{ memarg } => {
+            Operator::I32Store { memarg } => {
                 let value = stack.pop().unwrap();
                 let address = stack.pop().unwrap();
-                match (address,value) {
-                    (Value::I32Const(i32_address), Value::I32Const(i32_value) )=> {
-                        let int_value_address = context.i32_type().const_int(i32_value as u64, false);
-                        let int_value_value = handle_value(value, context);
-                        let mut ptr: PointerValue = pointer_value;
-                        unsafe {
-                            ptr = pointer_value.const_in_bounds_gep(pointer_value.get_type(),&[int_value_address]);
-                        }
-                        let _ = builder.build_store(ptr, int_value_value);
-                        initialize_memory(context, memory_value,global_values_arr, &i32_to_i8s( i32_value), i32_address as u32);
-                    }
-                    _ => {
-                        println!("i32.store not possible as no const values on the stack");
-                    }
-                }
+                // match (address,value) {
+                //     (Value::I32Const(i32_address), Value::I32Const(i32_value) )=> {
+                //         let int_value_address = context.i32_type().const_int(i32_value as u64, false);
+                //         let int_value_value = handle_value(value, context);
+                //         let mut ptr: PointerValue = pointer_value;
+                //         unsafe {
+                //             ptr = pointer_value.const_in_bounds_gep(pointer_value.get_type(),&[int_value_address]);
+                //         }
+                //         let _ = builder.build_store(ptr, int_value_value);
+                //         initialize_memory(context, memory_value,global_values_arr, &i32_to_i8s( i32_value), i32_address as u32);
+                //     }
+
+                //     _ => {
+                //         println!("i32.store not possible as no const values on the stack");
+                //     }
+                // }
 
                 let int_value_address = handle_value(address, context);
                 let int_value_value = handle_value(value, context);
-                let mut ptr: PointerValue = pointer_value;
-                unsafe {
-                    ptr = pointer_value.const_in_bounds_gep(pointer_value.get_type(),&[int_value_address]);
-                }
-                let _ = builder.build_store(ptr, int_value_value);
+                let mut ptr_tmp = pointer_value.const_to_int(context.i64_type());
+
+                let int_value_address_tmp = builder.build_int_add(
+                    int_value_address.const_cast(context.i64_type(), false),
+                    ptr_tmp,
+                    "add_ptr",
+                );
+
+                let final_ptr = builder.build_int_to_ptr(
+                    int_value_address_tmp.unwrap(),
+                    context.i64_type().ptr_type(AddressSpace::default()),
+                    "ptr",
+                );
+                // unsafe {
+                //     ptr = pointer_value.const_in_bounds_gep(pointer_value.get_type(),&[int_value_address]);
+                // }
+
+                //>TODO
+                //build_instert_element(array global, element, index, name)
+                //index peut etre intvalue
+                //array global to vector value
+
+                let _ = builder.build_store(final_ptr.unwrap(), int_value_value);
                 //initialize_memory(context, memory_value, &i32_to_i8s(context, int_value_value), address);
                 println!("i32.store");
             }

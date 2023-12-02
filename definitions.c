@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-extern char memory[100];
+extern char memory[3000];
 
 typedef unsigned int __wasi_fd_t;
 ssize_t fd_write(__wasi_fd_t fd, const void *bufs, const size_t buf_lens, size_t buf_count)
