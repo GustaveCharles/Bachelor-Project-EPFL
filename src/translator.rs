@@ -4,8 +4,8 @@ use inkwell::module::{self, Linkage};
 use inkwell::types::{AnyTypeEnum, BasicTypeEnum, PointerType};
 use inkwell::values::{ArrayValue, BasicMetadataValueEnum, BasicValue, GlobalValue, PointerValue};
 use inkwell::values::{BasicValueEnum, FloatValue, FunctionValue, IntValue};
+use inkwell::{builder, context, AddressSpace, IntPredicate};
 use inkwell::{builder::Builder, context::Context, module::Module};
-use inkwell::{context, AddressSpace, IntPredicate, builder};
 use std::cell::Ref;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -49,7 +49,7 @@ struct FunTypes {
     params_nb: usize,
     results_nb: usize,
 }
-#[derive(Copy,Clone,Debug)]
+#[derive(Copy, Clone, Debug)]
 struct BBStruct<'a> {
     basic_block: BasicBlock<'a>,
     loop_block: usize,
@@ -87,7 +87,7 @@ impl<'a> Register<'a> {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let context = Context::create();
     let module = context.create_module("hello-translation");
-    let wasm_bytes = std::fs::read("src/lib/gcd.wasm").expect("Unable to read wasm file");
+    let wasm_bytes = std::fs::read("src/lib/write_std_opti.wasm").expect("Unable to read wasm file");
     inkwell::targets::Target::initialize_all(&Default::default());
     // Parse the Wasm module
     // Iterate through the functions in the module
@@ -104,8 +104,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut bodies: Vec<FunctionBody> = Vec::new();
     let mut globals: Vec<Global> = Vec::new();
     let i8_type = context.i8_type();
-    let mut global_values_arr = vec![i8_type.const_zero(); 3000];
-    
+    let mut global_values_arr = vec![i8_type.const_zero(); 8*64 * 1024];
+
     let mut memory_val: GlobalValue =
         module.add_global(context.i8_type().array_type(0), None, "my_global_var");
 
@@ -116,14 +116,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let mut initial_size = 0;
                 for size in memories {
                     initial_size = size.unwrap().initial;
+                    println!("Memory size: {}", initial_size);
                 }
-                let page_size = 64 * 1024;
+                let page_size = 8*64 * 1024;
                 let total_memory_size_bytes = initial_size as usize * page_size;
                 println!("Memory size: {}", total_memory_size_bytes);
                 let i8_type = context.i8_type();
                 //let array_type = i8_type.array_type(total_memory_size_bytes as u32 );
                 //for testing purposes
-                let array_type = i8_type.array_type(3000 as u32);
+                let array_type = i8_type.array_type(page_size as u32);
                 memory_val = module.add_global(array_type, None, "memory");
                 memory_val.set_constant(false);
                 memory_val.set_linkage(Linkage::External);
@@ -339,9 +340,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         //let type = g.unwrap().ty;
         println!("Global type: {:?}", val);
         let name = format!("%G{}", global_counter);
-        let value = module_ref.add_global(context.i32_type(), None, name.as_str());
-        value.set_initializer(&context.i32_type().const_int(66592, false));
-        value.set_constant(false);
+        let global_value = module_ref.add_global(context.i32_type(), None, name.as_str());
+        global_value.set_initializer(&context.i32_type().const_int(65592, false));
+        global_value.set_constant(false);
         println!("Global: {:?}", name);
         global_counter += 1;
     }
@@ -640,7 +641,7 @@ fn process_function_body_helper<'ctx>(
 
                 let _global: inkwell::values::GlobalValue<'_> = module.get_global(&name).unwrap();
                 let ptr = _global.as_pointer_value();
-                builder.position_at_end(entry_bb);
+                //builder.position_at_end(entry_bb);
                 let _ = builder.build_store(ptr, handle_value(value, context));
                 println!("global.set {}", global_index);
             }
@@ -649,7 +650,7 @@ fn process_function_body_helper<'ctx>(
                 let name = format!("%G{}", global_index);
                 let _global: inkwell::values::GlobalValue<'_> = module.get_global(&name).unwrap();
                 let ptr = _global.as_pointer_value();
-                builder.position_at_end(entry_bb);
+                //builder.position_at_end(entry_bb);
                 let value = builder.build_load(context.i32_type(), ptr, "%G0");
 
                 //let value: inkwell::values::IntValue<'_> = _global.as_basic_value_enum().into_int_value();
@@ -718,7 +719,7 @@ fn process_function_body_helper<'ctx>(
                         loop_block: 0,
                     };
                     prev_instruction_is_branch = false;
-                }else {
+                } else {
                     bb_stack.pop();
                 }
                 println!("end");
@@ -793,27 +794,27 @@ fn process_function_body_helper<'ctx>(
             }
 
             Operator::If { blockty } => {
-                let condition = stack.pop().unwrap();
-                let val = handle_value(condition, context);
+                // let condition = stack.pop().unwrap();
+                // let val = handle_value(condition, context);
 
-                let then_block = context.append_basic_block(function, "then");
-                let else_block = context.append_basic_block(function, "else");
-                let merge_block = context.append_basic_block(function, "ifcont");
+                // let then_block = context.append_basic_block(function, "then");
+                // let else_block = context.append_basic_block(function, "else");
+                // let merge_block = context.append_basic_block(function, "ifcont");
 
-                builder.build_conditional_branch(val, then_block, else_block);
+                // builder.build_conditional_branch(val, then_block, else_block);
 
-                // Populate then_block
-                builder.position_at_end(then_block);
-                // Pseudo-code: Add instructions for the 'then' sequence.
-                builder.build_unconditional_branch(else_block);
+                // // Populate then_block
+                // builder.position_at_end(then_block);
+                // // Pseudo-code: Add instructions for the 'then' sequence.
+                // builder.build_unconditional_branch(else_block);
 
-                // Populate else_block, if there is one
-                builder.position_at_end(else_block);
-                // Pseudo-code: Add instructions for the 'else' sequence, if any.
-                builder.build_unconditional_branch(merge_block);
+                // // Populate else_block, if there is one
+                // builder.position_at_end(else_block);
+                // // Pseudo-code: Add instructions for the 'else' sequence, if any.
+                // builder.build_unconditional_branch(merge_block);
 
-                // Continue with merge_block
-                builder.position_at_end(merge_block);
+                // // Continue with merge_block
+                // builder.position_at_end(merge_block);
 
                 println!("if {:?}", blockty);
             }
@@ -959,51 +960,61 @@ fn process_function_body_helper<'ctx>(
             Operator::I32Store { memarg } => {
                 let value = stack.pop().unwrap();
                 let address = stack.pop().unwrap();
-                // match (address,value) {
-                //     (Value::I32Const(i32_address), Value::I32Const(i32_value) )=> {
-                //         let int_value_address = context.i32_type().const_int(i32_value as u64, false);
-                //         let int_value_value = handle_value(value, context);
-                //         let mut ptr: PointerValue = pointer_value;
-                //         unsafe {
-                //             ptr = pointer_value.const_in_bounds_gep(pointer_value.get_type(),&[int_value_address]);
-                //         }
-                //         let _ = builder.build_store(ptr, int_value_value);
-                //         initialize_memory(context, memory_value,global_values_arr, &i32_to_i8s( i32_value), i32_address as u32);
-                //     }
-
-                //     _ => {
-                //         println!("i32.store not possible as no const values on the stack");
-                //     }
-                // }
 
                 let int_value_address = handle_value(address, context);
                 let int_value_value = handle_value(value, context);
-                let mut ptr_tmp = pointer_value.const_to_int(context.i64_type());
+                let ptr_tmp = builder.build_ptr_to_int(pointer_value, context.i64_type(), "ptr");
+
+                let int_value_address_cast = builder.build_int_z_extend(
+                    int_value_address,
+                    context.i64_type(),
+                    "cast",
+                );
 
                 let int_value_address_tmp = builder.build_int_add(
-                    int_value_address.const_cast(context.i64_type(), false),
-                    ptr_tmp,
+                    int_value_address_cast.unwrap(),
+                    ptr_tmp.unwrap(),
                     "add_ptr",
                 );
 
                 let final_ptr = builder.build_int_to_ptr(
                     int_value_address_tmp.unwrap(),
                     context.i64_type().ptr_type(AddressSpace::default()),
-                    "ptr",
+                    "ptr_build",
                 );
-                // unsafe {
-                //     ptr = pointer_value.const_in_bounds_gep(pointer_value.get_type(),&[int_value_address]);
-                // }
-
-                //>TODO
-                //build_instert_element(array global, element, index, name)
-                //builder.build_insert_value(global_values_arr, value, index, name);
-                //index peut etre intvalue
-                //array global to vector value
 
                 let _ = builder.build_store(final_ptr.unwrap(), int_value_value);
-                //initialize_memory(context, memory_value, &i32_to_i8s(context, int_value_value), address);
                 println!("i32.store");
+            }
+
+            Operator::I32Load { memarg } => {
+                let address = stack.pop().unwrap();
+                let int_value_address = handle_value(address, context);
+                let ptr_tmp = builder.build_ptr_to_int(pointer_value, context.i64_type(), "ptr");
+
+                let int_value_address_cast = builder.build_int_z_extend(
+                    int_value_address,
+                    context.i64_type(),
+                    "cast",
+                );
+
+                let int_value_address_tmp = builder.build_int_add(
+                    int_value_address_cast.unwrap(),
+                    ptr_tmp.unwrap(),
+                    "add_ptr",
+                );
+
+                let final_ptr = builder.build_int_to_ptr(
+                    int_value_address_tmp.unwrap(),
+                    context.i64_type().ptr_type(AddressSpace::default()),
+                    "ptr_build",
+                );
+
+                let ptr = final_ptr.unwrap();
+
+                let value = builder.build_load(context.i64_type(),ptr, "load");
+                stack.push(Value::IntVar(value.unwrap().into_int_value()));
+                println!("i32.load");
             }
 
             Operator::I32RemU => {
@@ -1017,6 +1028,32 @@ fn process_function_body_helper<'ctx>(
                 stack.push(Value::IntVar(result.unwrap()));
                 next += 1;
                 println!("i32.rem_u")
+            }
+
+            Operator::Drop => {
+                stack.pop();
+                println!("drop");
+            }
+
+            Operator::Select => {
+                let false_cond = stack.pop().unwrap();
+                let true_cond = stack.pop().unwrap();
+                let cond = stack.pop().unwrap();
+
+                let int_value_cond = handle_value(cond, context);
+                let int_value_lhs = handle_value(true_cond, context);
+                let int_value_rhs = handle_value(false_cond, context);
+
+                let result = builder.build_select(
+                    int_value_cond,
+                    int_value_lhs,
+                    int_value_rhs,
+                    next.to_string().as_str(),
+                );
+
+                stack.push(Value::IntVar(result.unwrap().into_int_value()));
+                next += 1;
+                println!("select");
             }
             // Handle other operators as needed
             _ => {
