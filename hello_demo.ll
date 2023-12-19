@@ -24,16 +24,18 @@ entry:
   store i32 %"%2", ptr @"%G0", align 4
   %"%R3_3" = load i32, ptr %"%R0_3", align 4
   %cast = zext i32 %"%R3_3" to i64
-  %add_ptr = add i64 %cast, ptrtoint (ptr @memory to i64)
+  %add_offset = add i64 12, %cast
+  %add_ptr = add i64 %add_offset, ptrtoint (ptr @memory to i64)
   %ptr_build = inttoptr i64 %add_ptr to ptr
   store i32 14, ptr %ptr_build, align 4
   %"%R3_31" = load i32, ptr %"%R0_3", align 4
   %cast2 = zext i32 %"%R3_31" to i64
-  %add_ptr3 = add i64 %cast2, ptrtoint (ptr @memory to i64)
-  %ptr_build4 = inttoptr i64 %add_ptr3 to ptr
-  store i32 1024, ptr %ptr_build4, align 4
-  %"%R3_35" = load i32, ptr %"%R0_3", align 4
-  %"%3" = add i32 %"%R3_35", 8
+  %add_offset3 = add i64 8, %cast2
+  %add_ptr4 = add i64 %add_offset3, ptrtoint (ptr @memory to i64)
+  %ptr_build5 = inttoptr i64 %add_ptr4 to ptr
+  store i32 1024, ptr %ptr_build5, align 4
+  %"%R3_36" = load i32, ptr %"%R0_3", align 4
+  %"%3" = add i32 %"%R3_36", 8
   %"%R4_3" = load i32, ptr %"%R0_3", align 4
   %"%4" = add i32 %"%R4_3", 4
   %"%F1" = call i32 @fd_write(i32 1, i32 %"%3", i32 1, i32 %"%4")

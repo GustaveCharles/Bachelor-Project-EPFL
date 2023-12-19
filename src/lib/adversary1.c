@@ -4,7 +4,7 @@ int main()
 {
 
     // volatile int keepRunning = 1;
-    while (true)
+    while (1)
     {
         //printf("This loop will run until keepRunning changes.\n");
         // sleep(1); // Include unistd.h for Unix-like systems if using sleep

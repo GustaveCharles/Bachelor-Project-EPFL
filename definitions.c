@@ -3,36 +3,37 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-extern char memory[8*65536];
+extern char memory[8 * 64 * 1024];
+//extern char memory[1024];
 
 typedef unsigned int __wasi_fd_t;
 typedef size_t __wasi_size_t;
 
-typedef struct __wasi_ciovec_t {
-    const void *buf;
+typedef struct __wasi_ciovec_t
+{
+    int string_offset;
     size_t buf_len;
 } __wasi_ciovec_t;
 
-
-ssize_t fd_write(__wasi_fd_t fd,  uintptr_t iovs_offset, const size_t iov_len, __wasi_size_t buf_count)
+ssize_t fd_write(__wasi_fd_t fd, uintptr_t iovs_offset, const size_t iov_len, __wasi_size_t buf_count)
 {
     printf("fd_write called\n fd: %u\n  iovs: %lu\n  iov_len: %zu\n  buf_count: %zu\n", fd, iovs_offset, iov_len, buf_count);
 
     ssize_t total_written = 0;
-    const __wasi_ciovec_t* iovs = (__wasi_ciovec_t*) &memory[iovs_offset];
-    printf("iovs: %p\n", iovs);
-    printf("iovs[0].buf: %p\n", &iovs[0].buf);
+    const char iovs = memory[iovs_offset];
+    printf("address of iovs: %p\n", &iovs);
     printf("memory: %p\n", &memory[0]);
 
     for (size_t i = 0; i < iov_len; ++i)
     {
-        const char* string_addr = iovs[i].buf;
-        int length = iovs[i].buf_len;
+        int offset = i * sizeof(__wasi_ciovec_t);
         
-        printf("string_addr: %s\n", string_addr);   
+        int length = memory[iovs_offset + offset + 4] ;
         printf("length: %d\n", length);
+        int string_addr = memory[iovs_offset + offset];
+        printf("string_addr: %d\n", string_addr);
 
-        ssize_t written = write(fd, string_addr, length);
+        ssize_t written = write(fd, &memory[string_addr], length);
         if (written < 0)
         {
             return -1; // Write error occurred
@@ -40,7 +41,8 @@ ssize_t fd_write(__wasi_fd_t fd,  uintptr_t iovs_offset, const size_t iov_len, _
         total_written += written;
         memory[buf_count] = total_written;
     }
-    
+
+    printf("total_written: %zu\n", total_written);
     return 0;
 }
 

@@ -105,6 +105,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut globals: Vec<Global> = Vec::new();
     let i8_type = context.i8_type();
     let mut global_values_arr = vec![i8_type.const_zero(); 8*64 * 1024];
+    //let mut global_values_arr = vec![i8_type.const_zero();1024];
 
     let mut memory_val: GlobalValue =
         module.add_global(context.i8_type().array_type(0), None, "my_global_var");
@@ -119,6 +120,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Memory size: {}", initial_size);
                 }
                 let page_size = 8*64 * 1024;
+                //let page_size = 64 * 1024;
                 let total_memory_size_bytes = initial_size as usize * page_size;
                 println!("Memory size: {}", total_memory_size_bytes);
                 let i8_type = context.i8_type();
@@ -957,34 +959,73 @@ fn process_function_body_helper<'ctx>(
 
                 println!("i32.eq");
             }
+            // Operator::I32Store { memarg } => {
+            //     let value = stack.pop().unwrap();
+            //     let address = stack.pop().unwrap();
+            //     let int_value_address = handle_value(address, context);
+            //     let int_value_value = handle_value(value, context);
+            //     let ptr_tmp = builder.build_ptr_to_int(pointer_value, context.i64_type(), "ptr");
+    
+            //     let int_value_address_cast = builder.build_int_z_extend(
+            //         int_value_address,
+            //         context.i64_type(),
+            //         "cast",
+            //     );
+    
+            //     let int_value_address_tmp = builder.build_int_add(
+            //         int_value_address_cast.unwrap(),
+            //         ptr_tmp.unwrap(),
+            //         "add_ptr",
+            //     );
+    
+            //     let final_ptr = builder.build_int_to_ptr(
+            //         int_value_address_tmp.unwrap(),
+            //         context.i64_type().ptr_type(AddressSpace::default()),
+            //         "ptr_build",
+            //     );
+            //     println!("{} {} {}", int_value_address, int_value_value, memarg.offset);
+            //     println!("{:?}", final_ptr);
+                
+            //     let _ = builder.build_store(final_ptr.unwrap(), int_value_value);
+            //     println!("i32.store");
+            // }
             Operator::I32Store { memarg } => {
                 let value = stack.pop().unwrap();
-                let address = stack.pop().unwrap();
+                let base_address = stack.pop().unwrap();
 
-                let int_value_address = handle_value(address, context);
-                let int_value_value = handle_value(value, context);
+                let intval_base_address = handle_value(base_address, context);
+                let intval_value = handle_value(value, context);
                 let ptr_tmp = builder.build_ptr_to_int(pointer_value, context.i64_type(), "ptr");
 
-                let int_value_address_cast = builder.build_int_z_extend(
-                    int_value_address,
+                
+                let offset = context.i64_type().const_int(memarg.offset, false);
+
+                let intval_base_address_cast = builder.build_int_z_extend(
+                    intval_base_address,
                     context.i64_type(),
                     "cast",
                 );
 
+                let offset_tmp = builder.build_int_add(offset, intval_base_address_cast.unwrap(), "add_offset");
+
                 let int_value_address_tmp = builder.build_int_add(
-                    int_value_address_cast.unwrap(),
+                    offset_tmp.unwrap(),
                     ptr_tmp.unwrap(),
                     "add_ptr",
                 );
+
 
                 let final_ptr = builder.build_int_to_ptr(
                     int_value_address_tmp.unwrap(),
                     context.i64_type().ptr_type(AddressSpace::default()),
                     "ptr_build",
                 );
+                println!("{} {} {}", intval_base_address, intval_value, offset);
+                println!("{:?}", final_ptr);
 
-                let _ = builder.build_store(final_ptr.unwrap(), int_value_value);
-                println!("i32.store");
+
+                let _ = builder.build_store(final_ptr.unwrap(), intval_value);
+                println!("i32.store: {:?}", memarg);
             }
 
             Operator::I32Load { memarg } => {
