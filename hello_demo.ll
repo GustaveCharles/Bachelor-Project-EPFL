@@ -22,18 +22,21 @@ entry:
   %"%2" = sub i32 %"%G0", 16
   store i32 %"%2", ptr %"%R0_3", align 4
   store i32 %"%2", ptr @"%G0", align 4
+
   %"%R3_3" = load i32, ptr %"%R0_3", align 4
   %cast = zext i32 %"%R3_3" to i64
   %add_offset = add i64 12, %cast
   %add_ptr = add i64 %add_offset, ptrtoint (ptr @memory to i64)
   %ptr_build = inttoptr i64 %add_ptr to ptr
   store i32 14, ptr %ptr_build, align 4
+  
   %"%R3_31" = load i32, ptr %"%R0_3", align 4
   %cast2 = zext i32 %"%R3_31" to i64
   %add_offset3 = add i64 8, %cast2
   %add_ptr4 = add i64 %add_offset3, ptrtoint (ptr @memory to i64)
   %ptr_build5 = inttoptr i64 %add_ptr4 to ptr
   store i32 1024, ptr %ptr_build5, align 4
+
   %"%R3_36" = load i32, ptr %"%R0_3", align 4
   %"%3" = add i32 %"%R3_36", 8
   %"%R4_3" = load i32, ptr %"%R0_3", align 4

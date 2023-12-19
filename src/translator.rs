@@ -87,7 +87,7 @@ impl<'a> Register<'a> {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let context = Context::create();
     let module = context.create_module("hello-translation");
-    let wasm_bytes = std::fs::read("src/lib/write_std_opti.wasm").expect("Unable to read wasm file");
+    let wasm_bytes = std::fs::read("src/lib/hello_works.wasm").expect("Unable to read wasm file");
     inkwell::targets::Target::initialize_all(&Default::default());
     // Parse the Wasm module
     // Iterate through the functions in the module
@@ -384,7 +384,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("LLVM bitcode has been written to hello_demo.bc");
 
     let ir_string = module.print_to_string().to_string();
-    let mut file = File::create("hello_demo.ll").expect("Failed to create file");
+    let mut file = File::create("hello_works.ll").expect("Failed to create file");
     file.write_all(ir_string.as_bytes())
         .expect("Failed to write to file");
 
@@ -722,6 +722,7 @@ fn process_function_body_helper<'ctx>(
                     };
                     prev_instruction_is_branch = false;
                 } else {
+                    
                     bb_stack.pop();
                 }
                 println!("end");
@@ -1022,7 +1023,6 @@ fn process_function_body_helper<'ctx>(
                 );
                 println!("{} {} {}", intval_base_address, intval_value, offset);
                 println!("{:?}", final_ptr);
-
 
                 let _ = builder.build_store(final_ptr.unwrap(), intval_value);
                 println!("i32.store: {:?}", memarg);

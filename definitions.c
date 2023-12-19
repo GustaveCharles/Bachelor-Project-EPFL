@@ -27,13 +27,14 @@ ssize_t fd_write(__wasi_fd_t fd, uintptr_t iovs_offset, const size_t iov_len, __
     for (size_t i = 0; i < iov_len; ++i)
     {
         int offset = i * sizeof(__wasi_ciovec_t);
-        
+        int* string_addr = (int*) &memory[iovs_offset + offset ];
+        printf("string_addr: %d\n", *string_addr);
+
         int length = memory[iovs_offset + offset + 4] ;
         printf("length: %d\n", length);
-        int string_addr = memory[iovs_offset + offset];
-        printf("string_addr: %d\n", string_addr);
 
-        ssize_t written = write(fd, &memory[string_addr], length);
+
+        ssize_t written = write(fd, &memory[*string_addr], length);
         if (written < 0)
         {
             return -1; // Write error occurred
