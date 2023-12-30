@@ -1,18 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-int main(int argc, char *argv[]) {
-    // if (argc != 3) {
-    //     printf("Usage: %s <numerator> <denominator>\n", argv[0]);
-    //     return 1;
-    // }
+int main(int argc, char *argv[])
+{
 
-    volatile double numerator = atof(argv[1]);
-    volatile double denominator = atof(argv[2]);
+    volatile double numerator = atoi(argv[1]);
+    volatile double denominator = atoi(argv[2]);
 
     volatile double result = numerator / denominator;
 
-    printf("Result: %lf\n", result);
+    printf("Result: %d\n", result);
 
     return 0;
 }

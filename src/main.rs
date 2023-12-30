@@ -10,7 +10,7 @@ use inkwell::{
 use wasmparser::OperatorsReader;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let wasm_file_path = "src/lib/write_std_opti.wasm";
+    let wasm_file_path = "src/lib/fibonacci_c.wasm";
     let file = File::open(wasm_file_path)?;
     parse(file)?;
 

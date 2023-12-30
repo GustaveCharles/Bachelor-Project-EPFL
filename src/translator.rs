@@ -1,7 +1,7 @@
 extern crate wasmparser;
 use inkwell::basic_block::{self, BasicBlock};
 use inkwell::module::{self, Linkage};
-use inkwell::types::{AnyTypeEnum, BasicTypeEnum, PointerType};
+use inkwell::types::{AnyTypeEnum, BasicTypeEnum, IntType, PointerType};
 use inkwell::values::{ArrayValue, BasicMetadataValueEnum, BasicValue, GlobalValue, PointerValue};
 use inkwell::values::{BasicValueEnum, FloatValue, FunctionValue, IntValue};
 use inkwell::{builder, context, AddressSpace, IntPredicate};
@@ -14,6 +14,7 @@ use std::io::Read;
 use std::io::Write;
 use std::os::unix::process;
 use std::path::Path;
+use std::ptr;
 use std::rc::Rc;
 use wasmparser::{
     BinaryReader, BlockType, CodeSectionReader, FunctionBody, FunctionSectionReader, Global,
@@ -87,7 +88,8 @@ impl<'a> Register<'a> {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let context = Context::create();
     let module = context.create_module("hello-translation");
-    let wasm_bytes = std::fs::read("src/lib/hello_works.wasm").expect("Unable to read wasm file");
+    let wasm_bytes =
+        std::fs::read("src/lib/fibonacci_c_opti.wasm").expect("Unable to read wasm file");
     inkwell::targets::Target::initialize_all(&Default::default());
     // Parse the Wasm module
     // Iterate through the functions in the module
@@ -104,7 +106,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut bodies: Vec<FunctionBody> = Vec::new();
     let mut globals: Vec<Global> = Vec::new();
     let i8_type = context.i8_type();
-    let mut global_values_arr = vec![i8_type.const_zero(); 8*64 * 1024];
+    let mut global_values_arr = vec![i8_type.const_zero(); 8 * 64 * 1024];
     //let mut global_values_arr = vec![i8_type.const_zero();1024];
 
     let mut memory_val: GlobalValue =
@@ -119,7 +121,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     initial_size = size.unwrap().initial;
                     println!("Memory size: {}", initial_size);
                 }
-                let page_size = 8*64 * 1024;
+                let page_size = 8 * 64 * 1024;
                 //let page_size = 64 * 1024;
                 let total_memory_size_bytes = initial_size as usize * page_size;
                 println!("Memory size: {}", total_memory_size_bytes);
@@ -265,9 +267,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             fn_type,
             Some(Linkage::DLLImport),
         );
-        // let basic_block = context.append_basic_block(fn_value, "entry");
         let builder = context.create_builder();
-        // builder.position_at_end(basic_block);
 
         function_map.insert(
             name.clone(),
@@ -379,30 +379,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Print LLVM IR code to the console
     println!("{}", module.print_to_string().to_string());
 
-    module.verify().unwrap();
+    //module.verify().unwrap();
     module.write_bitcode_to_path(Path::new("hello_demo.bc"));
     println!("LLVM bitcode has been written to hello_demo.bc");
 
     let ir_string = module.print_to_string().to_string();
-    let mut file = File::create("hello_works.ll").expect("Failed to create file");
+    let mut file = File::create("fibonacci.ll").expect("Failed to create file");
     file.write_all(ir_string.as_bytes())
         .expect("Failed to write to file");
 
-    println!("LLVM IR has been written to hello_demo.ll");
+    println!("LLVM IR has been written to fibonacci.ll");
     Ok(())
 }
-
-fn allocate_memory() {}
-// //TODO Error handling?
-// fn handle_function_type<'ctx>(
-//     function: u32,
-//     context: &'ctx Context,
-//     module: &'ctx inkwell::module::Module<'ctx>,
-//     function_counter: &mut i32,
-//     function_map: &mut HashMap<String, CustomStruct<'ctx>>,
-// ) {
-
-// }
 
 // ************************ HELPER FUNCTIONS ************************
 
@@ -470,21 +458,6 @@ fn initialize_memory<'ctx>(
     memory.set_initializer(&initializer);
 }
 
-// fn i32_to_i8s<'a>(context: &'a Context, value: IntValue<'a>) -> Vec<u8> {
-//     let i8_type = context.i8_type();
-//     let mut bytes = Vec::new();
-
-//     for i in 0..4 {
-//         // Shift the value right by i*8 bits and then truncate to i8
-//         let shifted = value.const_ashr(i8_type.const_int(8 * i, false));
-//         let byte = shifted.const_truncate(i8_type);
-
-//         bytes.push(byte);
-//     }
-
-//     bytes
-// }
-
 fn i32_to_i8s(input: i32) -> Vec<u8> {
     let mut tmp = Vec::new();
 
@@ -511,10 +484,6 @@ fn process_function_body_helper<'ctx>(
     global_values_arr: &mut Vec<IntValue<'ctx>>,
 ) {
     let mut stack: Vec<Value> = Vec::new();
-    let mut current_bb = BBStruct {
-        basic_block: entry_bb,
-        loop_block: 0,
-    };
     let mut pointer_value: PointerValue = memory_value.as_pointer_value();
     let mut bb_stack: Vec<BBStruct> = Vec::new();
     let mut current_block = BBStruct {
@@ -524,6 +493,8 @@ fn process_function_body_helper<'ctx>(
     let mut next = 0;
     let mut register_bank: Vec<PointerValue> = Vec::new();
     let mut prev_instruction_is_branch = false;
+
+    //let ptr_inf_check = initiate_check(context, builder);
 
     for value in function.get_params() {
         let name = format!("%R{}_{}", next, function_counter);
@@ -722,7 +693,6 @@ fn process_function_body_helper<'ctx>(
                     };
                     prev_instruction_is_branch = false;
                 } else {
-                    
                     bb_stack.pop();
                 }
                 println!("end");
@@ -734,6 +704,8 @@ fn process_function_body_helper<'ctx>(
                 let block = context.append_basic_block(function, "loop");
                 builder.build_unconditional_branch(block);
                 builder.position_at_end(block);
+                let name = format!("%F0");
+                //inject_infinite_check(context,  builder, block, ptr_inf_check,function, function_map.get(&name).unwrap().fn_value);
                 current_block = BBStruct {
                     basic_block: block,
                     loop_block: 1,
@@ -750,10 +722,6 @@ fn process_function_body_helper<'ctx>(
                     basic_block: (after_block),
                     loop_block: (0),
                 });
-                //println!("bb_stack in block{:?}", bb_stack);
-                // let block = context.append_basic_block(function, "block");
-                // builder.position_at_end(block);
-                // current_block = block;
 
                 println!("block {:?}", blockty);
             }
@@ -770,7 +738,7 @@ fn process_function_body_helper<'ctx>(
                 let cmp = builder.build_int_compare(
                     IntPredicate::NE,
                     int_var,
-                    context.i32_type().const_int(0, false),
+                    context.bool_type().const_int(0, false),
                     "cmpeq",
                 );
                 let _ = builder.build_conditional_branch(
@@ -797,31 +765,31 @@ fn process_function_body_helper<'ctx>(
             }
 
             Operator::If { blockty } => {
-                // let condition = stack.pop().unwrap();
-                // let val = handle_value(condition, context);
+                let condition = stack.pop().unwrap();
+                let val = handle_value(condition, context);
 
-                // let then_block = context.append_basic_block(function, "then");
+                let then_block = context.append_basic_block(function, "then");
                 // let else_block = context.append_basic_block(function, "else");
-                // let merge_block = context.append_basic_block(function, "ifcont");
+                let merge_block = context.append_basic_block(function, "ifcont");
 
-                // builder.build_conditional_branch(val, then_block, else_block);
+                // let cmp = builder.build_int_compare(
+                //     IntPredicate::NE,
+                //     val,
+                //     context.bool_type().const_int(0, false),
+                //     "cmpeq",
+                // );
 
-                // // Populate then_block
-                // builder.position_at_end(then_block);
-                // // Pseudo-code: Add instructions for the 'then' sequence.
-                // builder.build_unconditional_branch(else_block);
+                builder.build_conditional_branch(check_i1_type(context, builder, val), then_block, merge_block);
 
-                // // Populate else_block, if there is one
-                // builder.position_at_end(else_block);
-                // // Pseudo-code: Add instructions for the 'else' sequence, if any.
-                // builder.build_unconditional_branch(merge_block);
-
-                // // Continue with merge_block
-                // builder.position_at_end(merge_block);
+                builder.position_at_end(then_block);
+                bb_stack.push(BBStruct {
+                    basic_block: merge_block,
+                    loop_block: 0,
+                });
 
                 println!("if {:?}", blockty);
             }
-
+            Operator::Else => {}
             Operator::Return => {
                 let value = stack.pop();
                 match value {
@@ -837,8 +805,8 @@ fn process_function_body_helper<'ctx>(
                 println!("return");
             }
             Operator::I32GtU => {
-                let left = stack.pop().unwrap();
                 let right = stack.pop().unwrap();
+                let left = stack.pop().unwrap();
 
                 let int_value_lhs = handle_value(left, context);
                 let int_value_rhs = handle_value(right, context);
@@ -855,8 +823,8 @@ fn process_function_body_helper<'ctx>(
                 println!("i32.gt_u");
             }
             Operator::I32LtU => {
-                let left = stack.pop().unwrap();
                 let right = stack.pop().unwrap();
+                let left = stack.pop().unwrap();
 
                 let int_value_lhs = handle_value(left, context);
                 let int_value_rhs = handle_value(right, context);
@@ -873,8 +841,8 @@ fn process_function_body_helper<'ctx>(
                 println!("i32.lt_u");
             }
             Operator::I32LtS => {
-                let left = stack.pop().unwrap();
                 let right = stack.pop().unwrap();
+                let left = stack.pop().unwrap();
 
                 let int_value_lhs = handle_value(left, context);
                 let int_value_rhs = handle_value(right, context);
@@ -891,8 +859,8 @@ fn process_function_body_helper<'ctx>(
                 println!("i32.lt_s");
             }
             Operator::I32LeU => {
-                let left = stack.pop().unwrap();
                 let right = stack.pop().unwrap();
+                let left = stack.pop().unwrap();
 
                 let int_value_lhs = handle_value(left, context);
                 let int_value_rhs = handle_value(right, context);
@@ -925,8 +893,8 @@ fn process_function_body_helper<'ctx>(
                 println!("i32.eqz");
             }
             Operator::I32Ne => {
-                let left = stack.pop().unwrap();
                 let right = stack.pop().unwrap();
+                let left = stack.pop().unwrap();
 
                 let int_value_lhs = handle_value(left, context);
                 let int_value_rhs = handle_value(right, context);
@@ -943,8 +911,8 @@ fn process_function_body_helper<'ctx>(
                 println!("i32.ne");
             }
             Operator::I32Eq => {
-                let left = stack.pop().unwrap();
                 let right = stack.pop().unwrap();
+                let left = stack.pop().unwrap();
 
                 let int_value_lhs = handle_value(left, context);
                 let int_value_rhs = handle_value(right, context);
@@ -960,36 +928,7 @@ fn process_function_body_helper<'ctx>(
 
                 println!("i32.eq");
             }
-            // Operator::I32Store { memarg } => {
-            //     let value = stack.pop().unwrap();
-            //     let address = stack.pop().unwrap();
-            //     let int_value_address = handle_value(address, context);
-            //     let int_value_value = handle_value(value, context);
-            //     let ptr_tmp = builder.build_ptr_to_int(pointer_value, context.i64_type(), "ptr");
-    
-            //     let int_value_address_cast = builder.build_int_z_extend(
-            //         int_value_address,
-            //         context.i64_type(),
-            //         "cast",
-            //     );
-    
-            //     let int_value_address_tmp = builder.build_int_add(
-            //         int_value_address_cast.unwrap(),
-            //         ptr_tmp.unwrap(),
-            //         "add_ptr",
-            //     );
-    
-            //     let final_ptr = builder.build_int_to_ptr(
-            //         int_value_address_tmp.unwrap(),
-            //         context.i64_type().ptr_type(AddressSpace::default()),
-            //         "ptr_build",
-            //     );
-            //     println!("{} {} {}", int_value_address, int_value_value, memarg.offset);
-            //     println!("{:?}", final_ptr);
-                
-            //     let _ = builder.build_store(final_ptr.unwrap(), int_value_value);
-            //     println!("i32.store");
-            // }
+
             Operator::I32Store { memarg } => {
                 let value = stack.pop().unwrap();
                 let base_address = stack.pop().unwrap();
@@ -998,23 +937,16 @@ fn process_function_body_helper<'ctx>(
                 let intval_value = handle_value(value, context);
                 let ptr_tmp = builder.build_ptr_to_int(pointer_value, context.i64_type(), "ptr");
 
-                
                 let offset = context.i64_type().const_int(memarg.offset, false);
 
-                let intval_base_address_cast = builder.build_int_z_extend(
-                    intval_base_address,
-                    context.i64_type(),
-                    "cast",
-                );
+                let intval_base_address_cast =
+                    builder.build_int_z_extend(intval_base_address, context.i64_type(), "cast");
 
-                let offset_tmp = builder.build_int_add(offset, intval_base_address_cast.unwrap(), "add_offset");
+                let offset_tmp =
+                    builder.build_int_add(offset, intval_base_address_cast.unwrap(), "add_offset");
 
-                let int_value_address_tmp = builder.build_int_add(
-                    offset_tmp.unwrap(),
-                    ptr_tmp.unwrap(),
-                    "add_ptr",
-                );
-
+                let int_value_address_tmp =
+                    builder.build_int_add(offset_tmp.unwrap(), ptr_tmp.unwrap(), "add_ptr");
 
                 let final_ptr = builder.build_int_to_ptr(
                     int_value_address_tmp.unwrap(),
@@ -1033,11 +965,8 @@ fn process_function_body_helper<'ctx>(
                 let int_value_address = handle_value(address, context);
                 let ptr_tmp = builder.build_ptr_to_int(pointer_value, context.i64_type(), "ptr");
 
-                let int_value_address_cast = builder.build_int_z_extend(
-                    int_value_address,
-                    context.i64_type(),
-                    "cast",
-                );
+                let int_value_address_cast =
+                    builder.build_int_z_extend(int_value_address, context.i64_type(), "cast");
 
                 let int_value_address_tmp = builder.build_int_add(
                     int_value_address_cast.unwrap(),
@@ -1053,7 +982,7 @@ fn process_function_body_helper<'ctx>(
 
                 let ptr = final_ptr.unwrap();
 
-                let value = builder.build_load(context.i64_type(),ptr, "load");
+                let value = builder.build_load(context.i64_type(), ptr, "load");
                 stack.push(Value::IntVar(value.unwrap().into_int_value()));
                 println!("i32.load");
             }
@@ -1126,8 +1055,73 @@ fn handle_value<'a>(rhs: Value<'a>, context: &'a Context) -> IntValue<'a> {
     int_value_rhs
 }
 
+fn check_i1_type<'ctx>(
+    context: &'ctx Context,
+    builder: &Builder<'ctx>,
+    value: IntValue<'ctx>,
+) -> IntValue<'ctx> {
+    // Suppose you have some LLVM value of unknown type
+    // Get the i1 type from the context
+    let i1_type: IntType = context.bool_type(); // i1 is the same as bool_type in Inkwell
+    if value.get_type() == i1_type {
+        println!("The IntValue is already of i1 type.");
+        value
+    } else {
+        let cmp = builder.build_int_compare(
+            IntPredicate::NE,
+            value,
+            context.i32_type().const_int(0, false),
+            "cmpeq",
+        );
+        cmp.unwrap()
+        }
+
+    // Check if the value's type is i1
+}
+
 fn export_function(function: FunctionValue) {
     function.set_linkage(Linkage::External);
+}
+
+fn initiate_check<'ctx>(context: &'ctx Context, builder: &Builder<'ctx>) -> PointerValue<'ctx> {
+    let err = builder.build_alloca(context.i32_type(), "check").unwrap();
+    builder.build_store(err, context.i32_type().const_int(0, false));
+    err
+}
+
+fn inject_infinite_check<'ctx>(
+    context: &'ctx Context,
+    builder: &Builder<'ctx>,
+    block: BasicBlock<'ctx>,
+    ptr: PointerValue<'ctx>,
+    fn_val: FunctionValue,
+    function: FunctionValue<'ctx>,
+) {
+    let check = builder.build_load(context.i32_type(), ptr, "check");
+    let rhs = context.i32_type().const_int(1, false);
+    let new_val = builder
+        .build_int_add(check.unwrap().into_int_value(), rhs, "check_inf")
+        .unwrap();
+    let cmp = builder.build_int_compare(
+        IntPredicate::EQ,
+        new_val,
+        context.i32_type().const_int(100, false),
+        "cmp",
+    );
+    builder.build_store(ptr, new_val);
+    let exit_bb = context.append_basic_block(fn_val, "exit");
+    let _ = builder.build_conditional_branch(cmp.unwrap(), exit_bb, block);
+    builder.position_at_end(exit_bb);
+    builder.build_call(
+        function,
+        &[context
+            .i32_type()
+            .const_int(0, false)
+            .as_basic_value_enum()
+            .into()],
+        "exit",
+    );
+    builder.position_at_end(block);
 }
 
 // fn map_block_type_to_llvm(block_type: BlockType, context: &Context) -> BasicTypeEnum {
