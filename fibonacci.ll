@@ -17,6 +17,7 @@ entry:
 define i32 @"%F3"(i32 %0) {
 entry:
   %"%R0_3" = alloca i32, align 4
+  store i32 %0, ptr %"%R0_3", align 4
   %"%R1_3" = alloca i32, align 4
   %"%R2_3" = alloca i32, align 4
   %"%R3_3" = load i32, ptr %"%R0_3", align 4
@@ -26,9 +27,8 @@ entry:
 then:                                             ; preds = %entry
   %"%R3_31" = load i32, ptr %"%R0_3", align 4
   ret i32 %"%R3_31"
-  br label %ifcont
 
-ifcont:                                           ; preds = %then, %entry
+ifcont:                                           ; preds = %entry
   br label %loop
 
 loop:                                             ; preds = %loop, %ifcont
@@ -43,8 +43,7 @@ loop:                                             ; preds = %loop, %ifcont
   %"%R6_32" = load i32, ptr %"%R0_3", align 4
   %"%6" = sub i32 %"%R6_32", 2
   store i32 %"%6", ptr %"%R0_3", align 4
-  %cmpeq = icmp ne i1 %"6", false
-  br i1 %cmpeq, label %loop, label %else
+  br i1 %"6", label %loop, label %else
 
 else:                                             ; preds = %loop
   %"%R7_3" = load i32, ptr %"%R0_3", align 4
@@ -57,7 +56,7 @@ define void @main() {
 entry:
   %"%R0_4" = alloca i32, align 4
   %"%R1_4" = alloca i32, align 4
-  %"%F3" = call i32 @"%F3"(i32 40)
+  %"%F3" = call i32 @"%F3"(i32 10)
   %"%G0" = load i32, ptr @"%G0", align 4
   %"%2" = sub i32 %"%G0", 16
   store i32 %"%2", ptr %"%R0_4", align 4
@@ -115,6 +114,7 @@ entry:
 define void @"%F7"(i32 %0) {
 entry:
   %"%R0_7" = alloca i32, align 4
+  store i32 %0, ptr %"%R0_7", align 4
   %"%R1_7" = load i32, ptr %"%R0_7", align 4
   store i32 %"%R1_7", ptr @"%G0", align 4
   ret void
@@ -123,6 +123,7 @@ entry:
 define i32 @"%F8"(i32 %0) {
 entry:
   %"%R0_8" = alloca i32, align 4
+  store i32 %0, ptr %"%R0_8", align 4
   %"%G0" = load i32, ptr @"%G0", align 4
   %"%R1_8" = load i32, ptr %"%R0_8", align 4
   %"%1" = sub i32 %"%G0", %"%R1_8"

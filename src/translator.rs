@@ -206,6 +206,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             Ok(Payload::DataSection(_data)) => {
                 // Handle the data section here
+                let mut initialized = false;
                 for item in _data {
                     let item = item?;
                     println!("  Data {:?}", item.data);
@@ -227,11 +228,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         item.data,
                                         value as u32,
                                     );
+                                    initialized = true;
                                 }
                                 _ => {}
                             }
                         }
                     }
+                }
+                if (!initialized) {
+                    initialize_memory(
+                        &context,
+                        memory_val,
+                        &mut global_values_arr,
+                        &[],
+                        0 as u32,
+                    );
                 }
             }
             _ => {}
@@ -493,13 +504,15 @@ fn process_function_body_helper<'ctx>(
     let mut next = 0;
     let mut register_bank: Vec<PointerValue> = Vec::new();
     let mut prev_instruction_is_branch = false;
+    let mut prev_instruction_is_return = false;
 
     //let ptr_inf_check = initiate_check(context, builder);
 
     for value in function.get_params() {
         let name = format!("%R{}_{}", next, function_counter);
-        let err = builder.build_alloca(value.get_type(), &name);
-        register_bank.push(err.unwrap());
+        let err = builder.build_alloca(value.get_type(), &name).unwrap();
+        builder.build_store(err, value);
+        register_bank.push(err);
 
         next += 1;
     }
@@ -682,7 +695,7 @@ fn process_function_body_helper<'ctx>(
                     //    "PREV INSTRUCTION IS BRANCH: {:?}",
                     //    prev_instruction_is_branch
                     //);
-                    if (prev_instruction_is_branch == false) {
+                    if (prev_instruction_is_branch == false && prev_instruction_is_return == false) {
                         let instr = builder.build_unconditional_branch(block.basic_block);
                         //println!("INSTRUCTION IN END: {:?}", instr);
                     }
@@ -692,6 +705,7 @@ fn process_function_body_helper<'ctx>(
                         loop_block: 0,
                     };
                     prev_instruction_is_branch = false;
+                    prev_instruction_is_return = false;
                 } else {
                     bb_stack.pop();
                 }
@@ -734,15 +748,9 @@ fn process_function_body_helper<'ctx>(
 
                 let value = stack.pop().unwrap();
                 let int_var = handle_value(value, context);
-                //cast every i32
-                let cmp = builder.build_int_compare(
-                    IntPredicate::NE,
-                    int_var,
-                    context.bool_type().const_int(0, false),
-                    "cmpeq",
-                );
+                //cast every i32^ to i1
                 let _ = builder.build_conditional_branch(
-                    cmp.unwrap(),
+                    check_i1_type(context, builder, int_var),
                     branch_block.basic_block,
                     continue_block,
                 );
@@ -801,7 +809,7 @@ fn process_function_body_helper<'ctx>(
                         builder.build_return(None);
                     }
                 }
-
+                prev_instruction_is_return = true;
                 println!("return");
             }
             Operator::I32GtU => {

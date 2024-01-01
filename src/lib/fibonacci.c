@@ -10,10 +10,10 @@ int fibonacci(int n)
 
 int main()
 {
-    int n = 40; // Change this to compute a different Fibonacci number
+    int n = 10; // Change this to compute a different Fibonacci number
     int result = fibonacci(n);
     char msg[] = "Fibonacci value: \n"; // Declare and initialize msg
     write(STDOUT_FILENO, msg, sizeof(msg) - 1);
-
+    //write(STDOUT_FILENO, &result, sizeof(result));
     return 0;
 }
